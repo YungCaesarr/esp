@@ -10,6 +10,10 @@ local espEnabled = true
 local espColor = Color3.fromRGB(150, 150, 150) -- Color inicial del ESP (más apagado)
 local uiVisible = true
 
+-- Teclas configurables
+local uiToggleKey = Enum.KeyCode.K     -- Tecla para abrir/cerrar la UI (predeterminada K)
+local espToggleKey = Enum.KeyCode.F3   -- Tecla para activar/desactivar el ESP (predeterminada F3)
+
 -- Tabla para guardar jugadores agregados en whitelist/target
 -- Se asigna "good" para whitelist y "target" para target
 local whitelistedPlayers = {}
@@ -198,6 +202,20 @@ sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
 sectionTitle.LayoutOrder = 1  -- Orden en la lista
 sectionTitle.Parent = contentFrame
 
+-- Función para alternar ESP (usada por el botón y por la tecla)
+local function toggleESP()
+	espEnabled = not espEnabled
+	-- Actualiza el estado (Enabled) de todos los highlights
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local highlight = player.Character:FindFirstChild("ESPHighlight")
+			if highlight then
+				highlight.Enabled = espEnabled
+			end
+		end
+	end
+end
+
 -- Botón Toggle ESP
 local toggleESPBtn = Instance.new("TextButton")
 toggleESPBtn.Name = "ToggleESPBtn"
@@ -214,16 +232,7 @@ local toggleCorner = Instance.new("UICorner", toggleESPBtn)
 toggleCorner.CornerRadius = UDim.new(0, 6)
 
 toggleESPBtn.MouseButton1Click:Connect(function()
-	espEnabled = not espEnabled
-	-- Actualiza el estado (Enabled) de todos los highlights
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character then
-			local highlight = player.Character:FindFirstChild("ESPHighlight")
-			if highlight then
-				highlight.Enabled = espEnabled
-			end
-		end
-	end
+	toggleESP()
 end)
 
 -----------------------------------------------------
@@ -703,9 +712,20 @@ Players.PlayerAdded:Connect(function(player)
 	end
 end)
 
+-----------------------------------------------------
+-- Función para detectar teclas configuradas
+-----------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if not gameProcessed and input.KeyCode == Enum.KeyCode.RightShift then
+	if gameProcessed then return end
+	
+	-- Toggle de la UI
+	if input.KeyCode == uiToggleKey then
 		uiVisible = not uiVisible
 		mainFrame.Visible = uiVisible
+	end
+	
+	-- Toggle del ESP
+	if input.KeyCode == espToggleKey then
+		toggleESP()
 	end
 end)
