@@ -1,6 +1,6 @@
--- // UI Lib MORADA con colores UI muy oscuros, sliders ajustados, color picker movible con header,
+-- // Vultures Hub by YungCaesar - UI Lib MORADA con colores UI muy oscuros, sliders ajustados, color picker movible con header,
 -- // whitelist y target integrados
--- // Créditos: YUNGCAESAR / Modificado por [TU NOMBRE]
+-- // Créditos: YungCaesar / Modificado por [TU NOMBRE]
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -52,27 +52,33 @@ topBar.Parent = mainFrame
 local topBarCorner = Instance.new("UICorner", topBar)
 topBarCorner.CornerRadius = UDim.new(0, 8)
 
+-- Etiqueta principal: "Vultures Hub"
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "TitleLabel"
-titleLabel.Size = UDim2.new(1, 0, 1, 0)
+-- Ajustamos el ancho a 130 (por ejemplo) y la altura igual a la del topBar
+titleLabel.Size = UDim2.new(0, 130, 1, 0)
+titleLabel.Position = UDim2.new(0, 10, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "UI Lib"
+titleLabel.Text = "Vultures Hub"
 titleLabel.Font = Enum.Font.GothamSemibold
 titleLabel.TextSize = 18
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Position = UDim2.new(0, 10, 0, 0)
 titleLabel.Parent = topBar
 
+-- Etiqueta de crédito: "by YungCaesar"
 local creditLabel = Instance.new("TextLabel")
 creditLabel.Name = "CreditLabel"
+-- Ajustamos el ancho a 120 (por ejemplo) y la altura igual a la del topBar
+-- y lo posicionamos a la derecha de "Vultures Hub"
 creditLabel.Size = UDim2.new(0, 120, 1, 0)
-creditLabel.Position = UDim2.new(0, 60, 0, 0)
+creditLabel.Position = UDim2.new(0, 125, 0, 0) 
 creditLabel.BackgroundTransparency = 1
-creditLabel.Text = "[YUNGCAESAR]"
+creditLabel.Text = "by YungCaesar"
 creditLabel.Font = Enum.Font.GothamSemibold
 creditLabel.TextSize = 14
 creditLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+creditLabel.TextTransparency = 0.3
 creditLabel.TextXAlignment = Enum.TextXAlignment.Left
 creditLabel.Parent = topBar
 
@@ -91,6 +97,7 @@ closeButton.MouseButton1Click:Connect(function()
 	uiVisible = not uiVisible
 	mainFrame.Visible = uiVisible
 end)
+
 
 -- Dragging de la UI principal
 local dragging, dragInput, dragStart, startPos
@@ -189,7 +196,7 @@ contentLayout.Changed:Connect(function(property)
 	end
 end)
 
--- Título
+-- Título de sección
 local sectionTitle = Instance.new("TextLabel")
 sectionTitle.Name = "SectionTitle"
 sectionTitle.Size = UDim2.new(1, -20, 0, 30)
@@ -467,7 +474,7 @@ end)
 -----------------------------------------------------
 local whitelistPanel = Instance.new("Frame")
 whitelistPanel.Name = "WhitelistPanel"
-whitelistPanel.Size = UDim2.new(1, -20, 0, 150) -- Ajusta la altura a tu gusto
+whitelistPanel.Size = UDim2.new(1, -20, 0, 150)
 whitelistPanel.BackgroundColor3 = Color3.fromRGB(35, 30, 45)
 whitelistPanel.BorderSizePixel = 0
 whitelistPanel.LayoutOrder = 4
@@ -497,12 +504,12 @@ whitelistTextBox.TextSize = 14
 whitelistTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 whitelistTextBox.ClearTextOnFocus = true
 whitelistTextBox.Text = ""
-whitelistTextBox.PlaceholderText = "Ingrese iniciales..."
+whitelistTextBox.PlaceholderText = "Nombre (Display e iniciales sirven)"
 whitelistTextBox.Parent = whitelistPanel
 
 local whitelistList = Instance.new("ScrollingFrame")
 whitelistList.Name = "WhitelistList"
-whitelistList.Size = UDim2.new(1, -10, 0, 60) -- Espacio para la lista
+whitelistList.Size = UDim2.new(1, -10, 0, 60)
 whitelistList.Position = UDim2.new(0, 5, 0, 70)
 whitelistList.BackgroundTransparency = 1
 whitelistList.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -528,7 +535,7 @@ end)
 -----------------------------------------------------
 local targetPanel = Instance.new("Frame")
 targetPanel.Name = "TargetPanel"
-targetPanel.Size = UDim2.new(1, -20, 0, 150) -- Ajusta la altura
+targetPanel.Size = UDim2.new(1, -20, 0, 150)
 targetPanel.BackgroundColor3 = Color3.fromRGB(35, 30, 45)
 targetPanel.BorderSizePixel = 0
 targetPanel.LayoutOrder = 5
@@ -558,7 +565,7 @@ targetTextBox.TextSize = 14
 targetTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 targetTextBox.ClearTextOnFocus = true
 targetTextBox.Text = ""
-targetTextBox.PlaceholderText = "Ingrese iniciales..."
+targetTextBox.PlaceholderText = "Nombre (Display e iniciales sirven)"
 targetTextBox.Parent = targetPanel
 
 local targetList = Instance.new("ScrollingFrame")
