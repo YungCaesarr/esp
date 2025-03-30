@@ -1,711 +1,684 @@
--- // Vultures Hub by YungCaesar - UI Lib MORADA con colores UI muy oscuros, sliders ajustados, color picker movible con header,
--- // whitelist y target integrados
--- // Créditos: YungCaesar / Modificado por [TU NOMBRE]
-
+------------------------------------------------
+-- Variables y servicios
+------------------------------------------------
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 local espEnabled = true
-local espColor = Color3.fromRGB(150, 150, 150) -- Color inicial del ESP (más apagado)
-local uiVisible = true
+-- Colores para el Highlight (estos también se usan para chams)
+local whitelistColor = Color3.fromRGB(0, 255, 255)   -- Cyan para whitelist
+local targetColor    = Color3.fromRGB(255, 255, 0)     -- Amarillo para target
+local defaultColor   = Color3.fromRGB(255, 255, 255)   -- Blanco para los demás
 
--- Teclas configurables
-local uiToggleKey = Enum.KeyCode.K     -- Tecla para abrir/cerrar la UI (predeterminada K)
-local espToggleKey = Enum.KeyCode.F3   -- Tecla para activar/desactivar el ESP (predeterminada F3)
+-- Listas para whitelist y target
+local WhitelistUsers = {}    -- array de nombres (string)
+local TargetUser = nil       -- string, nombre del jugador target
 
--- Tabla para guardar jugadores agregados en whitelist/target
--- Se asigna "good" para whitelist y "target" para target
-local whitelistedPlayers = {}
+-- Variables para ESP Config
+local showNameEnabled = false
+local showDistanceEnabled = false
+local showHealthEnabled = false   -- Toggle para la salud
+
+-- NUEVAS VARIABLES para elegir el tipo de ESP
+local showOutlineEnabled = true   -- Si true, se muestra el outline (Highlight outline)
+local showChamsEnabled = false    -- Si true, se colorea todo el cuerpo (chams) en vez de solo outline
+
+-- NUEVA VARIABLE para ajustar la opacidad de los Chams
+local chamsOpacity = 0.5  -- Valor entre 0 (completamente opaco) y 1 (completamente transparente)
+
+-- Variables para ajustar el tamaño del texto (size)
+local nameTextSize = 12
+
+-- NUEVAS VARIABLES: Colores manuales para el label (ubicados en ESP Colors)
+local labelNameColor = Color3.fromRGB(255, 255, 255)
+local labelDistanceColor = Color3.fromRGB(255, 255, 255)
+local labelHealthColor = Color3.fromRGB(255, 255, 255)
+
+-- Parámetros de actualización
+local maxDistance = 2500
+local refreshRate = 5   -- en ms
 
 ------------------------------------------------
--- Crear ScreenGui
+-- Funciones Auxiliares
 ------------------------------------------------
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "CustomUILib"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = game.CoreGui
+local function trim(s)
+	return (s:gsub("^%s*(.-)%s*$", "%1"))
+end
+
+local function getInitials(str)
+	local initials = ""
+	for word in string.gmatch(str, "%S+") do
+		initials = initials .. word:sub(1,1)
+	end
+	return initials:upper()
+end
+
+-- Convierte un Color3 a un string hexadecimal (para RichText)
+local function Color3ToHex(color)
+	return string.format("#%02X%02X%02X", math.floor(color.R*255), math.floor(color.G*255), math.floor(color.B*255))
+end
+
+-- Función para envolver callbacks y capturar errores
+local function safeCallback(callback)
+	return function(...)
+		local success, err = pcall(callback, ...)
+		if not success then
+			warn("Callback error: " .. err)
+		end
+	end
+end
 
 ------------------------------------------------
--- UI PRINCIPAL (tonos muy oscuros)
+-- Cargar Rayfield UI Library
 ------------------------------------------------
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainFrame"
-mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-mainFrame.Size = UDim2.new(0, 500, 0, 300)
-mainFrame.BackgroundColor3 = Color3.fromRGB(45, 35, 55)
-mainFrame.BorderSizePixel = 0
-mainFrame.Parent = screenGui
-
-local mainCorner = Instance.new("UICorner", mainFrame)
-mainCorner.CornerRadius = UDim.new(0, 8)
-
--- Top Bar de la UI principal
-local topBar = Instance.new("Frame")
-topBar.Name = "TopBar"
-topBar.Size = UDim2.new(1, 0, 0, 35)
-topBar.BackgroundColor3 = Color3.fromRGB(35, 25, 45)
-topBar.BorderSizePixel = 0
-topBar.Parent = mainFrame
-
-local topBarCorner = Instance.new("UICorner", topBar)
-topBarCorner.CornerRadius = UDim.new(0, 8)
-
--- Etiqueta principal: "Vultures Hub"
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Name = "TitleLabel"
--- Ajustamos el ancho a 130 (por ejemplo) y la altura igual a la del topBar
-titleLabel.Size = UDim2.new(0, 130, 1, 0)
-titleLabel.Position = UDim2.new(0, 10, 0, 0)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "Vultures Hub"
-titleLabel.Font = Enum.Font.GothamSemibold
-titleLabel.TextSize = 18
-titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Parent = topBar
-
--- Etiqueta de crédito: "by YungCaesar"
-local creditLabel = Instance.new("TextLabel")
-creditLabel.Name = "CreditLabel"
--- Ajustamos el ancho a 120 (por ejemplo) y la altura igual a la del topBar
--- y lo posicionamos a la derecha de "Vultures Hub"
-creditLabel.Size = UDim2.new(0, 120, 1, 0)
-creditLabel.Position = UDim2.new(0, 125, 0, 0) 
-creditLabel.BackgroundTransparency = 1
-creditLabel.Text = "by YungCaesar"
-creditLabel.Font = Enum.Font.GothamSemibold
-creditLabel.TextSize = 14
-creditLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-creditLabel.TextTransparency = 0.3
-creditLabel.TextXAlignment = Enum.TextXAlignment.Left
-creditLabel.Parent = topBar
-
-local closeButton = Instance.new("TextButton")
-closeButton.Name = "CloseButton"
-closeButton.Size = UDim2.new(0, 35, 0, 35)
-closeButton.Position = UDim2.new(1, -35, 0, 0)
-closeButton.BackgroundTransparency = 1
-closeButton.Text = "X"
-closeButton.Font = Enum.Font.GothamBold
-closeButton.TextSize = 18
-closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeButton.Parent = topBar
-
-closeButton.MouseButton1Click:Connect(function()
-	uiVisible = not uiVisible
-	mainFrame.Visible = uiVisible
-end)
-
-
--- Dragging de la UI principal
-local dragging, dragInput, dragStart, startPos
-
-local function updateInput(input)
-	local delta = input.Position - dragStart
-	mainFrame.Position = UDim2.new(
-		startPos.X.Scale,
-		startPos.X.Offset + delta.X,
-		startPos.Y.Scale,
-		startPos.Y.Offset + delta.Y
-	)
-end
-
-topBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
-		dragStart = input.Position
-		startPos = mainFrame.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
-		end)
-	end
-end)
-
-topBar.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement then
-		dragInput = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput and dragging then
-		updateInput(input)
-	end
-end)
-
--- Sidebar
-local sideBar = Instance.new("Frame")
-sideBar.Name = "SideBar"
-sideBar.Size = UDim2.new(0, 120, 1, -35)
-sideBar.Position = UDim2.new(0, 0, 0, 35)
-sideBar.BackgroundColor3 = Color3.fromRGB(35, 25, 45)
-sideBar.BorderSizePixel = 0
-sideBar.Parent = mainFrame
-
-local sideCorner = Instance.new("UICorner", sideBar)
-sideCorner.CornerRadius = UDim.new(0, 8)
-
-local homeButton = Instance.new("TextButton")
-homeButton.Name = "HomeButton"
-homeButton.Size = UDim2.new(1, -20, 0, 40)
-homeButton.Position = UDim2.new(0, 10, 0, 10)
-homeButton.BackgroundColor3 = Color3.fromRGB(45, 35, 55)
-homeButton.Text = "Home"
-homeButton.Font = Enum.Font.GothamSemibold
-homeButton.TextSize = 16
-homeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-homeButton.Parent = sideBar
-
-local homeCorner = Instance.new("UICorner", homeButton)
-homeCorner.CornerRadius = UDim.new(0, 6)
-
--------------------------------------------------------
--- Contenido (Panel central) convertido en ScrollingFrame
--------------------------------------------------------
-local contentFrame = Instance.new("ScrollingFrame")
-contentFrame.Name = "ContentFrame"
-contentFrame.Size = UDim2.new(1, -120, 1, -35)
-contentFrame.Position = UDim2.new(0, 120, 0, 35)
-contentFrame.BackgroundColor3 = Color3.fromRGB(40, 30, 50)
-contentFrame.BorderSizePixel = 0
-contentFrame.ScrollBarThickness = 8
-contentFrame.Parent = mainFrame
-
-local contentCorner = Instance.new("UICorner", contentFrame)
-contentCorner.CornerRadius = UDim.new(0, 8)
-
--- UIListLayout para acomodar los elementos uno debajo del otro
-local contentLayout = Instance.new("UIListLayout")
-contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-contentLayout.Padding = UDim.new(0, 10) -- Espacio vertical entre elementos
-contentLayout.Parent = contentFrame
-
--- Ajusta el CanvasSize cuando cambie la altura total de los hijos
-contentLayout.Changed:Connect(function(property)
-	if property == "AbsoluteContentSize" then
-		contentFrame.CanvasSize = UDim2.new(
-			0,
-			0,
-			0,
-			contentLayout.AbsoluteContentSize.Y + 20
-		)
-	end
-end)
-
--- Título de sección
-local sectionTitle = Instance.new("TextLabel")
-sectionTitle.Name = "SectionTitle"
-sectionTitle.Size = UDim2.new(1, -20, 0, 30)
-sectionTitle.BackgroundTransparency = 1
-sectionTitle.Text = "Controles de ESP"
-sectionTitle.Font = Enum.Font.GothamSemibold
-sectionTitle.TextSize = 16
-sectionTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
-sectionTitle.LayoutOrder = 1  -- Orden en la lista
-sectionTitle.Parent = contentFrame
-
--- Función para alternar ESP (usada por el botón y por la tecla)
-local function toggleESP()
-	espEnabled = not espEnabled
-	-- Actualiza el estado (Enabled) de todos los highlights
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character then
-			local highlight = player.Character:FindFirstChild("ESPHighlight")
-			if highlight then
-				highlight.Enabled = espEnabled
-			end
-		end
-	end
-end
-
--- Botón Toggle ESP
-local toggleESPBtn = Instance.new("TextButton")
-toggleESPBtn.Name = "ToggleESPBtn"
-toggleESPBtn.Size = UDim2.new(0, 120, 0, 35)
-toggleESPBtn.BackgroundColor3 = Color3.fromRGB(55, 45, 65)
-toggleESPBtn.Text = "Toggle ESP"
-toggleESPBtn.Font = Enum.Font.GothamSemibold
-toggleESPBtn.TextSize = 14
-toggleESPBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleESPBtn.LayoutOrder = 2
-toggleESPBtn.Parent = contentFrame
-
-local toggleCorner = Instance.new("UICorner", toggleESPBtn)
-toggleCorner.CornerRadius = UDim.new(0, 6)
-
-toggleESPBtn.MouseButton1Click:Connect(function()
-	toggleESP()
-end)
-
------------------------------------------------------
--- Panel del Color Picker (ventana movible con header)
------------------------------------------------------
-local colorPickerFrame = Instance.new("Frame")
-colorPickerFrame.Name = "ColorPickerFrame"
-colorPickerFrame.Size = UDim2.new(0, 320, 0, 280)
-colorPickerFrame.Position = UDim2.new(0.5, -160, 0.5, -140)
-colorPickerFrame.BackgroundColor3 = Color3.fromRGB(45, 35, 55)
-colorPickerFrame.BorderSizePixel = 0
-colorPickerFrame.Visible = false
-colorPickerFrame.ClipsDescendants = true
-colorPickerFrame.Parent = screenGui
-
-local pickerFrameCorner = Instance.new("UICorner", colorPickerFrame)
-pickerFrameCorner.CornerRadius = UDim.new(0, 8)
-
-local colorPickerHeader = Instance.new("Frame")
-colorPickerHeader.Name = "ColorPickerHeader"
-colorPickerHeader.Size = UDim2.new(1, 0, 0, 25)
-colorPickerHeader.BackgroundColor3 = Color3.fromRGB(35, 25, 45)
-colorPickerHeader.BorderSizePixel = 0
-colorPickerHeader.Parent = colorPickerFrame
-
-local headerCorner = Instance.new("UICorner", colorPickerHeader)
-headerCorner.CornerRadius = UDim.new(0, 8)
-
-local headerLabel = Instance.new("TextLabel")
-headerLabel.Name = "HeaderLabel"
-headerLabel.Size = UDim2.new(1, -10, 1, 0)
-headerLabel.Position = UDim2.new(0, 5, 0, 0)
-headerLabel.BackgroundTransparency = 1
-headerLabel.Text = "Color Picker"
-headerLabel.Font = Enum.Font.GothamSemibold
-headerLabel.TextSize = 16
-headerLabel.TextColor3 = Color3.fromRGB(255,255,255)
-headerLabel.Parent = colorPickerHeader
-
--- Dragging del Color Picker
-local draggingPicker = false
-local dragInputPicker, dragStartPicker, startPosPicker
-
-colorPickerHeader.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		draggingPicker = true
-		dragStartPicker = input.Position
-		startPosPicker = colorPickerFrame.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				draggingPicker = false
-			end
-		end)
-	end
-end)
-
-colorPickerHeader.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement then
-		dragInputPicker = input
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if input == dragInputPicker and draggingPicker then
-		local delta = input.Position - dragStartPicker
-		colorPickerFrame.Position = UDim2.new(
-			startPosPicker.X.Scale,
-			startPosPicker.X.Offset + delta.X,
-			startPosPicker.Y.Scale,
-			startPosPicker.Y.Offset + delta.Y
-		)
-	end
-end)
-
--- Preview dinámico en el Color Picker
-local previewBox = Instance.new("Frame")
-previewBox.Name = "PreviewBox"
-previewBox.Size = UDim2.new(0, 50, 0, 50)
-previewBox.Position = UDim2.new(0, 10, 0, 35)
-previewBox.BackgroundColor3 = espColor
-previewBox.BorderSizePixel = 0
-previewBox.Parent = colorPickerFrame
-
-local previewCorner = Instance.new("UICorner", previewBox)
-previewCorner.CornerRadius = UDim.new(0, 6)
-
--- Tabla de sliders para ajustar R, G, B
-local sliders = {}
-
-local function updatePreview()
-	local r = sliders.R.Fill.Size.X.Scale
-	local g = sliders.G.Fill.Size.X.Scale
-	local b = sliders.B.Fill.Size.X.Scale
-	previewBox.BackgroundColor3 = Color3.new(r, g, b)
-end
-
-local function createSlider(labelText, posY, initialValue)
-	local sliderFrame = Instance.new("Frame")
-	sliderFrame.Name = labelText.."Slider"
-	sliderFrame.Size = UDim2.new(0, 260, 0, 30)
-	sliderFrame.Position = UDim2.new(0, 30, 0, posY)
-	sliderFrame.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-	sliderFrame.Parent = colorPickerFrame
-	sliderFrame.ClipsDescendants = true
-
-	local sliderCorner = Instance.new("UICorner", sliderFrame)
-	sliderCorner.CornerRadius = UDim.new(0, 4)
-
-	local label = Instance.new("TextLabel")
-	label.Name = labelText.."Label"
-	label.Size = UDim2.new(0, 40, 1, 0)
-	label.Position = UDim2.new(0, 5, 0, 0)
-	label.BackgroundTransparency = 1
-	label.Text = labelText
-	label.Font = Enum.Font.GothamSemibold
-	label.TextSize = 14
-	label.TextColor3 = Color3.new(1, 1, 1)
-	label.Parent = sliderFrame
-
-	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
-	fill.Size = UDim2.new(initialValue, 0, 1, 0)
-	fill.Position = UDim2.new(0, 50, 0, 0)
-	fill.BackgroundColor3 = Color3.fromRGB(100, 100, 150)
-	fill.Parent = sliderFrame
-
-	local fillCorner = Instance.new("UICorner", fill)
-	fillCorner.CornerRadius = UDim.new(0, 4)
-
-	return {Slider = sliderFrame, Fill = fill}
-end
-
-sliders.R = createSlider("R", 90, espColor.R)
-sliders.G = createSlider("G", 130, espColor.G)
-sliders.B = createSlider("B", 170, espColor.B)
-
-for _, sliderObj in pairs(sliders) do
-	sliderObj.Slider.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			local conn
-			conn = UserInputService.InputChanged:Connect(function(move)
-				if move.UserInputType == Enum.UserInputType.MouseMovement then
-					local absPos = sliderObj.Slider.AbsolutePosition.X + 50
-					local newVal = math.clamp((move.Position.X - absPos) / (sliderObj.Slider.AbsoluteSize.X - 50), 0, 1)
-					sliderObj.Fill.Size = UDim2.new(newVal, 0, 1, 0)
-					updatePreview()
-				end
-			end)
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					conn:Disconnect()
-				end
-			end)
-		end
-	end)
-end
-
-local confirmBtn = Instance.new("TextButton")
-confirmBtn.Name = "ConfirmBtn"
-confirmBtn.Size = UDim2.new(0, 100, 0, 30)
-confirmBtn.Position = UDim2.new(0.5, -110, 1, -40)
-confirmBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 80)
-confirmBtn.Text = "Confirmar"
-confirmBtn.Font = Enum.Font.GothamSemibold
-confirmBtn.TextSize = 14
-confirmBtn.TextColor3 = Color3.new(1, 1, 1)
-confirmBtn.Parent = colorPickerFrame
-
-local confirmCorner = Instance.new("UICorner", confirmBtn)
-confirmCorner.CornerRadius = UDim.new(0, 4)
-
-confirmBtn.MouseButton1Click:Connect(function()
-	local r = sliders.R.Fill.Size.X.Scale
-	local g = sliders.G.Fill.Size.X.Scale
-	local b = sliders.B.Fill.Size.X.Scale
-	espColor = Color3.new(r, g, b)
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer and player.Character then
-			local highlight = player.Character:FindFirstChild("ESPHighlight")
-			if highlight then
-				highlight.OutlineColor = espColor
-			end
-		end
-	end
-	colorPickerFrame.Visible = false
-end)
-
-local cancelBtn = Instance.new("TextButton")
-cancelBtn.Name = "CancelBtn"
-cancelBtn.Size = UDim2.new(0, 100, 0, 30)
-cancelBtn.Position = UDim2.new(0.5, 20, 1, -40)
-cancelBtn.BackgroundColor3 = Color3.fromRGB(70, 60, 80)
-cancelBtn.Text = "Cancelar"
-cancelBtn.Font = Enum.Font.GothamSemibold
-cancelBtn.TextSize = 14
-cancelBtn.TextColor3 = Color3.new(1, 1, 1)
-cancelBtn.Parent = colorPickerFrame
-
-local cancelCorner = Instance.new("UICorner", cancelBtn)
-cancelCorner.CornerRadius = UDim.new(0, 4)
-
-cancelBtn.MouseButton1Click:Connect(function()
-	colorPickerFrame.Visible = false
-end)
-
--- Botón para abrir el Color Picker
-local openColorPickerBtn = Instance.new("TextButton")
-openColorPickerBtn.Name = "OpenColorPickerBtn"
-openColorPickerBtn.Size = UDim2.new(0, 150, 0, 35)
-openColorPickerBtn.BackgroundColor3 = Color3.fromRGB(55, 45, 65)
-openColorPickerBtn.Text = "Elegir Color ESP"
-openColorPickerBtn.Font = Enum.Font.GothamSemibold
-openColorPickerBtn.TextSize = 14
-openColorPickerBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-openColorPickerBtn.LayoutOrder = 3
-openColorPickerBtn.Parent = contentFrame
-
-local pickerCorner = Instance.new("UICorner", openColorPickerBtn)
-pickerCorner.CornerRadius = UDim.new(0, 6)
-
-openColorPickerBtn.MouseButton1Click:Connect(function()
-	-- Actualiza los tamaños de los sliders según el color actual
-	sliders.R.Fill.Size = UDim2.new(espColor.R, 0, 1, 0)
-	sliders.G.Fill.Size = UDim2.new(espColor.G, 0, 1, 0)
-	sliders.B.Fill.Size = UDim2.new(espColor.B, 0, 1, 0)
-	updatePreview()
-	colorPickerFrame.Visible = true
-end)
-
------------------------------------------------------
--- SECCIÓN DE WHITELIST
------------------------------------------------------
-local whitelistPanel = Instance.new("Frame")
-whitelistPanel.Name = "WhitelistPanel"
-whitelistPanel.Size = UDim2.new(1, -20, 0, 150)
-whitelistPanel.BackgroundColor3 = Color3.fromRGB(35, 30, 45)
-whitelistPanel.BorderSizePixel = 0
-whitelistPanel.LayoutOrder = 4
-whitelistPanel.Parent = contentFrame
-
-local wpCorner = Instance.new("UICorner", whitelistPanel)
-wpCorner.CornerRadius = UDim.new(0, 8)
-
-local whitelistLabel = Instance.new("TextLabel")
-whitelistLabel.Name = "WhitelistLabel"
-whitelistLabel.Size = UDim2.new(1, -10, 0, 25)
-whitelistLabel.Position = UDim2.new(0, 5, 0, 5)
-whitelistLabel.BackgroundTransparency = 1
-whitelistLabel.Text = "Whitelist Player"
-whitelistLabel.Font = Enum.Font.GothamBold
-whitelistLabel.TextSize = 18
-whitelistLabel.TextColor3 = Color3.fromRGB(80, 200, 220)
-whitelistLabel.Parent = whitelistPanel
-
-local whitelistTextBox = Instance.new("TextBox")
-whitelistTextBox.Name = "WhitelistTextBox"
-whitelistTextBox.Size = UDim2.new(1, -10, 0, 30)
-whitelistTextBox.Position = UDim2.new(0, 5, 0, 35)
-whitelistTextBox.BackgroundColor3 = Color3.fromRGB(45, 35, 55)
-whitelistTextBox.Font = Enum.Font.GothamSemibold
-whitelistTextBox.TextSize = 14
-whitelistTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-whitelistTextBox.ClearTextOnFocus = true
-whitelistTextBox.Text = ""
-whitelistTextBox.PlaceholderText = "Nombre (Display e iniciales sirven)"
-whitelistTextBox.Parent = whitelistPanel
-
-local whitelistList = Instance.new("ScrollingFrame")
-whitelistList.Name = "WhitelistList"
-whitelistList.Size = UDim2.new(1, -10, 0, 60)
-whitelistList.Position = UDim2.new(0, 5, 0, 70)
-whitelistList.BackgroundTransparency = 1
-whitelistList.CanvasSize = UDim2.new(0, 0, 0, 0)
-whitelistList.ScrollBarThickness = 8
-whitelistList.Parent = whitelistPanel
-
-local whitelistLayout = Instance.new("UIListLayout", whitelistList)
-whitelistLayout.SortOrder = Enum.SortOrder.LayoutOrder
-whitelistLayout.Padding = UDim.new(0, 5)
-whitelistLayout.Changed:Connect(function(property)
-	if property == "AbsoluteContentSize" then
-		whitelistList.CanvasSize = UDim2.new(
-			0,
-			0,
-			0,
-			whitelistLayout.AbsoluteContentSize.Y
-		)
-	end
-end)
-
------------------------------------------------------
--- SECCIÓN DE TARGET
------------------------------------------------------
-local targetPanel = Instance.new("Frame")
-targetPanel.Name = "TargetPanel"
-targetPanel.Size = UDim2.new(1, -20, 0, 150)
-targetPanel.BackgroundColor3 = Color3.fromRGB(35, 30, 45)
-targetPanel.BorderSizePixel = 0
-targetPanel.LayoutOrder = 5
-targetPanel.Parent = contentFrame
-
-local tpCorner = Instance.new("UICorner", targetPanel)
-tpCorner.CornerRadius = UDim.new(0, 8)
-
-local targetLabel = Instance.new("TextLabel")
-targetLabel.Name = "TargetLabel"
-targetLabel.Size = UDim2.new(1, -10, 0, 25)
-targetLabel.Position = UDim2.new(0, 5, 0, 5)
-targetLabel.BackgroundTransparency = 1
-targetLabel.Text = "Target"
-targetLabel.Font = Enum.Font.GothamBold
-targetLabel.TextSize = 18
-targetLabel.TextColor3 = Color3.fromRGB(240, 200, 120)
-targetLabel.Parent = targetPanel
-
-local targetTextBox = Instance.new("TextBox")
-targetTextBox.Name = "TargetTextBox"
-targetTextBox.Size = UDim2.new(1, -10, 0, 30)
-targetTextBox.Position = UDim2.new(0, 5, 0, 35)
-targetTextBox.BackgroundColor3 = Color3.fromRGB(45, 35, 55)
-targetTextBox.Font = Enum.Font.GothamSemibold
-targetTextBox.TextSize = 14
-targetTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-targetTextBox.ClearTextOnFocus = true
-targetTextBox.Text = ""
-targetTextBox.PlaceholderText = "Nombre (Display e iniciales sirven)"
-targetTextBox.Parent = targetPanel
-
-local targetList = Instance.new("ScrollingFrame")
-targetList.Name = "TargetList"
-targetList.Size = UDim2.new(1, -10, 0, 60)
-targetList.Position = UDim2.new(0, 5, 0, 70)
-targetList.BackgroundTransparency = 1
-targetList.CanvasSize = UDim2.new(0, 0, 0, 0)
-targetList.ScrollBarThickness = 8
-targetList.Parent = targetPanel
-
-local targetLayout = Instance.new("UIListLayout", targetList)
-targetLayout.SortOrder = Enum.SortOrder.LayoutOrder
-targetLayout.Padding = UDim.new(0, 5)
-targetLayout.Changed:Connect(function(property)
-	if property == "AbsoluteContentSize" then
-		targetList.CanvasSize = UDim2.new(
-			0,
-			0,
-			0,
-			targetLayout.AbsoluteContentSize.Y
-		)
-	end
-end)
-
------------------------------------------------------
--- Funciones para agregar y remover jugadores
------------------------------------------------------
-local function createListEntry(player, parentFrame)
-	local entryFrame = Instance.new("Frame")
-	entryFrame.Size = UDim2.new(1, 0, 0, 30)
-	entryFrame.BackgroundColor3 = Color3.fromRGB(45, 35, 55)
-	local ecorner = Instance.new("UICorner", entryFrame)
-	ecorner.CornerRadius = UDim.new(0, 4)
-	entryFrame.Parent = parentFrame
-
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(0.7, 0, 1, 0)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = player.Name
-	nameLabel.Font = Enum.Font.GothamSemibold
-	nameLabel.TextSize = 14
-	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	nameLabel.Parent = entryFrame
-
-	local removeBtn = Instance.new("TextButton")
-	removeBtn.Size = UDim2.new(0.3, 0, 1, 0)
-	removeBtn.Position = UDim2.new(0.7, 0, 0, 0)
-	removeBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
-	removeBtn.Text = "Remove"
-	removeBtn.Font = Enum.Font.GothamSemibold
-	removeBtn.TextSize = 14
-	removeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	removeBtn.Parent = entryFrame
-
-	removeBtn.MouseButton1Click:Connect(function()
-		whitelistedPlayers[tostring(player.UserId)] = nil
-		entryFrame:Destroy()
-		if player.Character then
-			local highlight = player.Character:FindFirstChild("ESPHighlight")
-			if highlight then
-				highlight.OutlineColor = espColor
-			end
-		end
-	end)
-end
-
-local function addPlayerByInitials(inputText, listType)
-	local inputLower = inputText:lower()
-	for _, player in ipairs(Players:GetPlayers()) do
-		local nameLower = player.Name:lower()
-		local displayLower = player.DisplayName:lower()
-		if nameLower:find(inputLower) or displayLower:find(inputLower) then
-			local key = tostring(player.UserId)
-			if whitelistedPlayers[key] then return end
-			whitelistedPlayers[key] = listType
-
-			-- Ajusta color si el personaje existe
-			if player.Character then
-				local highlight = player.Character:FindFirstChild("ESPHighlight")
-				if highlight then
-					if listType == "target" then
-						highlight.OutlineColor = Color3.fromRGB(240, 200, 120)
-					elseif listType == "good" then
-						highlight.OutlineColor = Color3.fromRGB(80, 200, 220)
-					end
-				end
-			end
-
-			-- Crea el item en la lista
-			if listType == "good" then
-				createListEntry(player, whitelistList)
-			elseif listType == "target" then
-				createListEntry(player, targetList)
-			end
-		end
-	end
-end
-
-whitelistTextBox.FocusLost:Connect(function(enterPressed)
-	if enterPressed and whitelistTextBox.Text ~= "" then
-		addPlayerByInitials(whitelistTextBox.Text, "good")
-		whitelistTextBox.Text = ""
-	end
-end)
-
-targetTextBox.FocusLost:Connect(function(enterPressed)
-	if enterPressed and targetTextBox.Text ~= "" then
-		addPlayerByInitials(targetTextBox.Text, "target")
-		targetTextBox.Text = ""
-	end
-end)
-
------------------------------------------------------
--- Función para crear/actualizar el Highlight (ESP)
------------------------------------------------------
-local function addChams(character)
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+------------------------------------------------
+-- Crear Ventana y Tabs (UI personalizada)
+------------------------------------------------
+local customTheme = {
+    TextColor = Color3.fromRGB(230, 230, 250),
+    Background = Color3.fromRGB(20, 20, 30),
+    Topbar = Color3.fromRGB(30, 30, 40),
+    Shadow = Color3.fromRGB(10, 10, 15),
+    NotificationBackground = Color3.fromRGB(20, 20, 30),
+    NotificationActionsBackground = Color3.fromRGB(220, 220, 240),
+    TabBackground = Color3.fromRGB(25, 25, 35),
+    TabStroke = Color3.fromRGB(45, 45, 55),
+    TabBackgroundSelected = Color3.fromRGB(70, 70, 90),
+    TabTextColor = Color3.fromRGB(230, 230, 250),
+    SelectedTabTextColor = Color3.fromRGB(255, 255, 255),
+    ElementBackground = Color3.fromRGB(25, 25, 35),
+    ElementBackgroundHover = Color3.fromRGB(30, 30, 45),
+    SecondaryElementBackground = Color3.fromRGB(20, 20, 30),
+    ElementStroke = Color3.fromRGB(50, 50, 60),
+    SecondaryElementStroke = Color3.fromRGB(35, 35, 45),       
+    SliderBackground = Color3.fromRGB(45, 45, 65),
+    SliderProgress = Color3.fromRGB(45, 45, 65),
+    SliderStroke = Color3.fromRGB(55, 55, 75),
+    ToggleBackground = Color3.fromRGB(20, 20, 30),
+    ToggleEnabled = Color3.fromRGB(90, 70, 140),
+    ToggleDisabled = Color3.fromRGB(70, 70, 70),
+    ToggleEnabledStroke = Color3.fromRGB(100, 80, 150),
+    ToggleDisabledStroke = Color3.fromRGB(80, 80, 80),
+    ToggleEnabledOuterStroke = Color3.fromRGB(100, 80, 150),
+    ToggleDisabledOuterStroke = Color3.fromRGB(80, 80, 80),
+    DropdownSelected = Color3.fromRGB(25, 25, 35),
+    DropdownUnselected = Color3.fromRGB(20, 20, 30),
+    InputBackground = Color3.fromRGB(20, 20, 30),
+    InputStroke = Color3.fromRGB(50, 50, 60),
+    PlaceholderColor = Color3.fromRGB(150, 150, 170)
+}
+
+local Window = Rayfield:CreateWindow({
+   Name = "YungCaesar Hub",
+   Icon = "rewind",
+   LoadingTitle = "YungCaesar Hub",
+   LoadingSubtitle = "by YungCaesar",
+   Theme = customTheme,
+   ConfigurationSaving = {
+      Enabled = true,
+      FileName = "YungCaesarHub"
+   },
+   Discord = {
+      Enabled = false,
+      Invite = "",
+      RememberJoins = true
+   },
+   KeySystem = false,
+})
+
+-- Crear pestañas:
+local MainTab = Window:CreateTab("Main", 4483362458)
+local ColorsTab = Window:CreateTab("ESP Colors", "palette")
+local EspConfigTab = Window:CreateTab("ESP Config", "settings")
+
+------------------------------------------------
+-- Definición de funciones de ESP
+------------------------------------------------
+local function addChams(player, character)
 	local highlight = character:FindFirstChild("ESPHighlight")
-	if highlight then
-		highlight.OutlineColor = espColor
-		highlight.Enabled = espEnabled
-	else
+	if not highlight then
 		highlight = Instance.new("Highlight")
 		highlight.Name = "ESPHighlight"
-		highlight.FillColor = Color3.new(1, 1, 1)
-		highlight.OutlineColor = espColor
-		highlight.FillTransparency = 1
-		highlight.Enabled = espEnabled
 		highlight.Parent = character
+	end
+	
+	-- Si el ESP está desactivado, se deshabilita el highlight y se retorna
+	if not espEnabled then
+		highlight.Enabled = false
+		return
+	end
+	
+	highlight.Enabled = true
+	
+	-- Actualizar colores (outline y fill) según whitelist/target/default
+	if table.find(WhitelistUsers, player.Name) then
+		highlight.OutlineColor = whitelistColor
+		highlight.FillColor = whitelistColor
+	elseif TargetUser and player.Name == TargetUser then
+		highlight.OutlineColor = targetColor
+		highlight.FillColor = targetColor
+	else
+		highlight.OutlineColor = defaultColor
+		highlight.FillColor = defaultColor
+	end
+	
+	-- Aplicar modo Chams o solo Outline
+	if showChamsEnabled then
+		highlight.FillTransparency = chamsOpacity
+	else
+		highlight.FillTransparency = 1
+	end
+	
+	-- Ajustamos la visibilidad del outline según showOutlineEnabled
+	if showOutlineEnabled then
+		highlight.OutlineTransparency = 0
+	else
+		highlight.OutlineTransparency = 1
 	end
 end
 
+local function updateAllHighlights()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local highlight = player.Character:FindFirstChild("ESPHighlight")
+			if not highlight then
+				addChams(player, player.Character)
+				highlight = player.Character:FindFirstChild("ESPHighlight")
+			end
+			
+			if not espEnabled then
+				highlight.Enabled = false
+			else
+				highlight.Enabled = true
+				if table.find(WhitelistUsers, player.Name) then
+					highlight.OutlineColor = whitelistColor
+					highlight.FillColor = whitelistColor
+				elseif TargetUser and player.Name == TargetUser then
+					highlight.OutlineColor = targetColor
+					highlight.FillColor = targetColor
+				else
+					highlight.OutlineColor = defaultColor
+					highlight.FillColor = defaultColor
+				end
+				
+				if showChamsEnabled then
+					highlight.FillTransparency = chamsOpacity
+				else
+					highlight.FillTransparency = 1
+				end
+				
+				if showOutlineEnabled then
+					highlight.OutlineTransparency = 0
+				else
+					highlight.OutlineTransparency = 1
+				end
+			end
+			updatePlayerLabels(player)
+		end
+	end
+end
+
+-- Función para crear/actualizar el BillboardGui en el HumanoidRootPart (para labels)
+function updatePlayerLabels(player)
+	if not player.Character then return end
+	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	
+	-- Si el ESP está desactivado, se elimina el label y se retorna
+	if not espEnabled then
+		local existing = hrp:FindFirstChild("ESP_NameGui")
+		if existing then existing:Destroy() end
+		return
+	end
+	
+	if showNameEnabled then
+		if not hrp:FindFirstChild("ESP_NameGui") then
+			local bg = Instance.new("BillboardGui")
+			bg.Name = "ESP_NameGui"
+			bg.Adornee = hrp
+			bg.Size = UDim2.new(0, 150, 0, 25)
+			bg.StudsOffset = Vector3.new(0, 2.5, 0)
+			bg.AlwaysOnTop = true
+			
+			local label = Instance.new("TextLabel", bg)
+			label.BackgroundTransparency = 1
+			label.RichText = true
+			label.TextScaled = false
+			label.TextSize = nameTextSize
+			label.Font = Enum.Font.SourceSans
+			label.TextStrokeTransparency = 0
+			label.Size = UDim2.new(1, 0, 1, 0)
+			bg.Parent = hrp
+		end
+		
+		local label = hrp.ESP_NameGui:FindFirstChildOfClass("TextLabel")
+		if label then
+			local distanceText = "N/A"
+			if showDistanceEnabled then
+				local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				if localHRP then
+					local dist = (hrp.Position - localHRP.Position).Magnitude
+					if dist > maxDistance then dist = maxDistance end
+					distanceText = string.format("%.1f", dist)
+				end
+			end
+			local healthText = ""
+			if showHealthEnabled then
+				local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					local currentHealth = math.floor(humanoid.Health)
+					local maxHealth = math.floor(humanoid.MaxHealth)
+					healthText = "HP: " .. currentHealth .. "/" .. maxHealth
+				else
+					healthText = "HP: N/A"
+				end
+			end
+			
+			if showDistanceEnabled and showHealthEnabled then
+				label.Text = string.format(
+					'<font color="%s">%s</font> | <font color="%s">%s</font> | <font color="%s">%s</font>',
+					Color3ToHex(labelNameColor), player.Name,
+					Color3ToHex(labelDistanceColor), distanceText,
+					Color3ToHex(labelHealthColor), healthText
+				)
+			elseif showDistanceEnabled then
+				label.Text = string.format(
+					'<font color="%s">%s</font> | <font color="%s">%s</font>',
+					Color3ToHex(labelNameColor), player.Name,
+					Color3ToHex(labelDistanceColor), distanceText
+				)
+			elseif showHealthEnabled then
+				label.Text = string.format(
+					'<font color="%s">%s</font> | <font color="%s">%s</font>',
+					Color3ToHex(labelNameColor), player.Name,
+					Color3ToHex(labelHealthColor), healthText
+				)
+			else
+				label.Text = string.format('<font color="%s">%s</font>', Color3ToHex(labelNameColor), player.Name)
+			end
+			
+			label.TextSize = nameTextSize
+			label.TextStrokeTransparency = 0
+		end
+	else
+		local existing = hrp:FindFirstChild("ESP_NameGui")
+		if existing then existing:Destroy() end
+	end
+end
+
+------------------------------------------------
+-- Bucle para actualizar la información del label continuamente
+------------------------------------------------
+RunService.Heartbeat:Connect(function()
+	if (showDistanceEnabled or showHealthEnabled) and showNameEnabled then
+		local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+		if localHRP then
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player ~= LocalPlayer and player.Character then
+					updatePlayerLabels(player)
+				end
+			end
+		end
+	end
+end)
+
+------------------------------------------------
+-- Crear UI en la pestaña Main
+------------------------------------------------
+local ESPSection = MainTab:CreateSection("ESP Options")
+local ToggleESP = MainTab:CreateToggle({
+   Name = "Activate ESP",
+   CurrentValue = espEnabled,
+   Flag = "ESP_Toggle",
+   Callback = safeCallback(function(Value)
+      espEnabled = Value
+      print("ESP is now:", espEnabled and "Enabled" or "Disabled")
+      updateAllHighlights()
+   end),
+})
+
+------------------------------------------------
+-- Sección: Whitelist Options
+------------------------------------------------
+local WhitelistSection = MainTab:CreateSection("Whitelist Options")
+local WhitelistDropdown
+local WhitelistInput = MainTab:CreateInput({
+   Name = "Whitelist User",
+   PlaceholderText = "Enter username, display name or initials",
+   RemoveTextAfterFocusLost = false,
+   Flag = "Whitelist_Input",
+   Callback = safeCallback(function(Text)
+      local inputText = trim(Text)
+      if inputText ~= "" then
+         local foundPlayer = nil
+         local inputLen = #inputText
+         for _, player in ipairs(Players:GetPlayers()) do
+            local name = player.Name
+            local display = player.DisplayName or ""
+            local displayInitials = getInitials(display)
+            if string.lower(name) == string.lower(inputText)
+               or string.lower(display) == string.lower(inputText)
+               or string.lower(name:sub(1, inputLen)) == string.lower(inputText)
+               or string.lower(display:sub(1, inputLen)) == string.lower(inputText)
+               or string.lower(displayInitials) == string.lower(inputText)
+               or string.lower(displayInitials:sub(1, inputLen)) == string.lower(inputText)
+            then
+               foundPlayer = player
+               break
+            end
+         end
+         
+         if foundPlayer then
+            if not table.find(WhitelistUsers, foundPlayer.Name) then
+               table.insert(WhitelistUsers, foundPlayer.Name)
+               print("Whitelisting user:", foundPlayer.Name)
+               -- Actualizamos el ESP del jugador de inmediato
+               if foundPlayer.Character then
+                  addChams(foundPlayer, foundPlayer.Character)
+               end
+            else
+               print("User already whitelisted:", foundPlayer.Name)
+            end
+         else
+            print("User not found:", inputText)
+         end
+         WhitelistDropdown:Refresh(WhitelistUsers)
+         WhitelistDropdown:Set({})
+         updateAllHighlights()
+      end
+   end),
+})
+
+WhitelistDropdown = MainTab:CreateDropdown({
+   Name = "Whitelisted Users (Click to remove)",
+   Options = WhitelistUsers,
+   CurrentOption = {},
+   MultipleOptions = false,
+   Flag = "Whitelist_Dropdown",
+   Callback = safeCallback(function(Options)
+      local selected = Options[1]
+      if selected then
+         for i, v in ipairs(WhitelistUsers) do
+            if v == selected then
+               table.remove(WhitelistUsers, i)
+               print("Removed whitelisted user:", selected)
+               -- Forzamos la actualización del jugador removido
+               for _, player in ipairs(Players:GetPlayers()) do
+                  if player.Name == selected and player.Character then
+                     addChams(player, player.Character)
+                  end
+               end
+               break
+            end
+         end
+         WhitelistDropdown:Refresh(WhitelistUsers)
+         WhitelistDropdown:Set({})
+         updateAllHighlights()
+      end
+   end),
+})
+
+------------------------------------------------
+-- Sección: Target Options
+------------------------------------------------
+local TargetInput = MainTab:CreateInput({
+   Name = "Target User",
+   PlaceholderText = "Enter username, display name or initials",
+   RemoveTextAfterFocusLost = false,
+   Flag = "Target_Input",
+   Callback = safeCallback(function(Text)
+      local inputText = trim(Text)
+      if inputText ~= "" then
+         local foundPlayer = nil
+         local inputLen = #inputText
+         for _, player in ipairs(Players:GetPlayers()) do
+            local name = player.Name
+            local display = player.DisplayName or ""
+            local displayInitials = getInitials(display)
+            if string.lower(name) == string.lower(inputText)
+               or string.lower(display) == string.lower(inputText)
+               or string.lower(name:sub(1, inputLen)) == string.lower(inputText)
+               or string.lower(display:sub(1, inputLen)) == string.lower(inputText)
+               or string.lower(displayInitials) == string.lower(inputText)
+               or string.lower(displayInitials:sub(1, inputLen)) == string.lower(inputText)
+            then
+               foundPlayer = player
+               break
+            end
+         end
+         
+         if foundPlayer then
+            TargetUser = foundPlayer.Name
+            print("Target set to:", TargetUser)
+            if foundPlayer.Character then
+               addChams(foundPlayer, foundPlayer.Character)
+            end
+         else
+            print("Target user not found:", inputText)
+            TargetUser = nil
+         end
+         local targetOption = {}
+         if TargetUser then table.insert(targetOption, TargetUser) end
+         TargetDropdown:Refresh(targetOption)
+         TargetDropdown:Set({})
+         updateAllHighlights()
+      end
+   end),
+})
+
+
+TargetDropdown = MainTab:CreateDropdown({
+   Name = "Targeted User (Click to remove)",
+   Options = TargetUser and {TargetUser} or {},
+   CurrentOption = {},
+   MultipleOptions = false,
+   Flag = "Target_Dropdown",
+   Callback = safeCallback(function(Options)
+      local selected = Options[1]
+      if selected then
+         print("Removed target user:", selected)
+         TargetUser = nil
+         -- Forzamos la actualización del jugador removido
+         for _, player in ipairs(Players:GetPlayers()) do
+            if player.Name == selected and player.Character then
+               addChams(player, player.Character)
+            end
+         end
+         TargetDropdown:Refresh({})
+         TargetDropdown:Set({})
+         updateAllHighlights()
+      end
+   end),
+})
+
+------------------------------------------------
+-- Sección: ESP Colors
+------------------------------------------------
+local ColorSection = ColorsTab:CreateSection("Adjust ESP Colors")
+local ColorPickerWhitelist = ColorsTab:CreateColorPicker({
+    Name = "Whitelist Color",
+    Color = whitelistColor,
+    Flag = "Color_Whitelist",
+    Callback = safeCallback(function(Value)
+        whitelistColor = Value
+        print("Whitelist color set to:", whitelistColor)
+        updateAllHighlights()
+    end),
+})
+
+local ColorPickerTarget = ColorsTab:CreateColorPicker({
+    Name = "Target Color",
+    Color = targetColor,
+    Flag = "Color_Target",
+    Callback = safeCallback(function(Value)
+        targetColor = Value
+        print("Target color set to:", targetColor)
+        updateAllHighlights()
+    end),
+})
+
+local ColorPickerDefault = ColorsTab:CreateColorPicker({
+    Name = "Default Color",
+    Color = defaultColor,
+    Flag = "Color_Default",
+    Callback = safeCallback(function(Value)
+        defaultColor = Value
+        print("Default color set to:", defaultColor)
+        updateAllHighlights()
+    end),
+})
+
+-- Sección para elegir los colores manuales del label
+local LabelColorsSection = ColorsTab:CreateSection("Label Colors")
+local nameColorPicker = ColorsTab:CreateColorPicker({
+   Name = "Name Color",
+   Color = labelNameColor,
+   Flag = "Label_NameColor",
+   Callback = safeCallback(function(Value)
+      labelNameColor = Value
+      for _, player in ipairs(Players:GetPlayers()) do
+         if player ~= LocalPlayer then
+            updatePlayerLabels(player)
+         end
+      end
+   end),
+})
+local distanceColorPicker = ColorsTab:CreateColorPicker({
+   Name = "Distance Color",
+   Color = labelDistanceColor,
+   Flag = "Label_DistanceColor",
+   Callback = safeCallback(function(Value)
+      labelDistanceColor = Value
+      for _, player in ipairs(Players:GetPlayers()) do
+         if player ~= LocalPlayer then
+            updatePlayerLabels(player)
+         end
+      end
+   end),
+})
+local healthColorPicker = ColorsTab:CreateColorPicker({
+   Name = "Health Color",
+   Color = labelHealthColor,
+   Flag = "Label_HealthColor",
+   Callback = safeCallback(function(Value)
+      labelHealthColor = Value
+      for _, player in ipairs(Players:GetPlayers()) do
+         if player ~= LocalPlayer then
+            updatePlayerLabels(player)
+         end
+      end
+   end),
+})
+
+------------------------------------------------
+-- Sección: ESP Config
+------------------------------------------------
+local ConfigSection = EspConfigTab:CreateSection("ESP Config")
+local nameToggle = EspConfigTab:CreateToggle({
+   Name = "Show Player Name",
+   CurrentValue = false,
+   Flag = "ESP_ShowName",
+   Callback = safeCallback(function(Value)
+      showNameEnabled = Value
+      for _, player in ipairs(Players:GetPlayers()) do
+         if player ~= LocalPlayer then
+            updatePlayerLabels(player)
+         end
+      end
+   end),
+})
+local distanceToggle = EspConfigTab:CreateToggle({
+   Name = "Show Distance",
+   CurrentValue = false,
+   Flag = "ESP_ShowDistance",
+   Callback = safeCallback(function(Value)
+      showDistanceEnabled = Value
+      for _, player in ipairs(Players:GetPlayers()) do
+         if player ~= LocalPlayer then
+            updatePlayerLabels(player)
+         end
+      end
+   end),
+})
+local healthToggle = EspConfigTab:CreateToggle({
+   Name = "Show Health",
+   CurrentValue = false,
+   Flag = "ESP_ShowHealth",
+   Callback = safeCallback(function(Value)
+      showHealthEnabled = Value
+      for _, player in ipairs(Players:GetPlayers()) do
+         if player ~= LocalPlayer then
+            updatePlayerLabels(player)
+         end
+      end
+   end),
+})
+local nameSizeSlider = EspConfigTab:CreateSlider({
+   Name = "Name Text Size",
+   Range = {8, 24},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = nameTextSize,
+   Flag = "ESP_NameTextSize",
+   Callback = safeCallback(function(Value)
+      nameTextSize = Value
+      for _, player in ipairs(Players:GetPlayers()) do
+         if player ~= LocalPlayer then
+            updatePlayerLabels(player)
+         end
+      end
+   end),
+})
+-- NUEVAS OPCIONES: toggles para Outline y Chams
+local outlineToggle = EspConfigTab:CreateToggle({
+   Name = "Enable Outline ESP",
+   CurrentValue = true,
+   Flag = "ESP_EnableOutline",
+   Callback = safeCallback(function(Value)
+      showOutlineEnabled = Value
+      updateAllHighlights()
+   end),
+})
+local chamsToggle = EspConfigTab:CreateToggle({
+   Name = "Enable Full Chams ESP",
+   CurrentValue = false,
+   Flag = "ESP_EnableChams",
+   Callback = safeCallback(function(Value)
+      showChamsEnabled = Value
+      updateAllHighlights()
+   end),
+})
+-- NUEVA OPCIÓN: Slider para ajustar la opacidad de los Chams
+local chamsOpacitySlider = EspConfigTab:CreateSlider({
+   Name = "Chams Opacity",
+   Range = {0, 1},
+   Increment = 0.05,
+   Suffix = "",
+   CurrentValue = chamsOpacity,
+   Flag = "ESP_ChamsOpacity",
+   Callback = safeCallback(function(Value)
+      chamsOpacity = Value
+      updateAllHighlights()
+   end),
+})
+
+------------------------------------------------
+-- Aplicar ESP a jugadores existentes y nuevos
+------------------------------------------------
 for _, player in ipairs(Players:GetPlayers()) do
 	if player ~= LocalPlayer then
 		if player.Character then
-			addChams(player.Character)
+			addChams(player, player.Character)
+			updatePlayerLabels(player)
 		end
 		player.CharacterAdded:Connect(function(char)
 			char:WaitForChild("HumanoidRootPart", 5)
-			addChams(char)
+			addChams(player, char)
+			updatePlayerLabels(player)
 		end)
 	end
 end
@@ -714,25 +687,31 @@ Players.PlayerAdded:Connect(function(player)
 	if player ~= LocalPlayer then
 		player.CharacterAdded:Connect(function(char)
 			char:WaitForChild("HumanoidRootPart", 5)
-			addChams(char)
+			addChams(player, char)
+			updatePlayerLabels(player)
 		end)
 	end
 end)
 
------------------------------------------------------
--- Función para detectar teclas configuradas
------------------------------------------------------
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
+------------------------------------------------
+-- Cargar la Configuración (Guardado automático)
+------------------------------------------------
+Rayfield:LoadConfiguration()
+
+------------------------------------------------
+-- Teclas de atajo para toggle UI y ESP
+------------------------------------------------
+local uiToggleKey = Enum.KeyCode.K
+local espToggleKey = Enum.KeyCode.F3
+
+UserInputService.InputBegan:Connect(safeCallback(function(input, gameProcessed)
 	if gameProcessed then return end
-	
-	-- Toggle de la UI
 	if input.KeyCode == uiToggleKey then
-		uiVisible = not uiVisible
-		mainFrame.Visible = uiVisible
+		Window:ToggleVisibility()
 	end
-	
-	-- Toggle del ESP
 	if input.KeyCode == espToggleKey then
-		toggleESP()
+		espEnabled = not espEnabled
+		updateAllHighlights()
+		print("ESP toggled via key:", espEnabled and "Enabled" or "Disabled")
 	end
-end)
+end))
