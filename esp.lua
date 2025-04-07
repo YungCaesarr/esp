@@ -209,17 +209,22 @@ end
 
 -- Actualizar el BillboardGui en los pies (studs)
 function updatePlayerFeetLabel(player)
+	-- Primero, si la opción de mostrar studs está desactivada, eliminamos cualquier gui existente y retornamos.
+	if not showDistanceEnabled then
+		if player.Character then
+			local feetPart = player.Character:FindFirstChild("LowerTorso") or player.Character:FindFirstChild("Torso") or player.Character:FindFirstChild("HumanoidRootPart")
+			if feetPart then
+				local existing = feetPart:FindFirstChild("ESP_FeetGui")
+				if existing then existing:Destroy() end
+			end
+		end
+		return
+	end
+
 	if not player.Character then return end
 	-- Buscamos la parte para los pies: LowerTorso o Torso; si no existe, usamos HumanoidRootPart.
 	local feetPart = player.Character:FindFirstChild("LowerTorso") or player.Character:FindFirstChild("Torso") or player.Character:FindFirstChild("HumanoidRootPart")
 	if not feetPart then return end
-
-	-- Si la opción de mostrar studs está desactivada, eliminamos el gui si existe.
-	if not showDistanceEnabled then
-		local existing = feetPart:FindFirstChild("ESP_FeetGui")
-		if existing then existing:Destroy() end
-		return
-	end
 
 	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
 	local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
