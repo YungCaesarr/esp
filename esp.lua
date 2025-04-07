@@ -7,23 +7,25 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 
 local espEnabled = true
--- Colores para el Highlight (estos también se usan para chams)
+-- Colores para el Highlight (para whitelist y target se mantienen, los demás se configuran por separado)
 local whitelistColor = Color3.fromRGB(0, 255, 255)   -- Cyan para whitelist
 local targetColor    = Color3.fromRGB(255, 255, 0)     -- Amarillo para target
-local defaultColor   = Color3.fromRGB(255, 255, 255)   -- Blanco para los demás
+-- Se eliminó defaultColor, en su lugar se usan chamsColor y outlineColor
+local chamsColor     = Color3.fromRGB(255, 255, 255)   -- Color para el fill de jugadores normales
+local outlineColor   = Color3.fromRGB(0, 0, 0)         -- Color para el outline de jugadores normales
 
 -- Listas para whitelist y target
 local WhitelistUsers = {}    -- array de nombres (string)
 local TargetUser = nil       -- string, nombre del jugador target
 
 -- Variables para ESP Config
-local showNameEnabled = false
-local showDistanceEnabled = false
-local showHealthEnabled = false   -- Toggle para la salud
+local showNameEnabled = false          -- Muestra el nombre+vida en la cabeza
+local showDistanceEnabled = false      -- Muestra los studs en los pies
+local showHealthEnabled = false        -- Toggle para la vida
 
 -- NUEVAS VARIABLES para elegir el tipo de ESP
-local showOutlineEnabled = true   -- Si true, se muestra el outline (Highlight outline)
-local showChamsEnabled = false    -- Si true, se colorea todo el cuerpo (chams) en vez de solo outline
+local showOutlineEnabled = true        -- Si true, se muestra el outline (Highlight outline)
+local showChamsEnabled = false         -- Si true, se colorea todo el cuerpo (chams) en vez de solo outline
 
 -- NUEVA VARIABLE para ajustar la opacidad de los Chams
 local chamsOpacity = 0.5  -- Valor entre 0 (completamente opaco) y 1 (completamente transparente)
@@ -31,14 +33,14 @@ local chamsOpacity = 0.5  -- Valor entre 0 (completamente opaco) y 1 (completame
 -- Variables para ajustar el tamaño del texto (size)
 local nameTextSize = 12
 
--- NUEVAS VARIABLES: Colores manuales para el label (ubicados en ESP Colors)
+-- NUEVAS VARIABLES: Color para el label (usado tanto en nombre como en studs)
 local labelNameColor = Color3.fromRGB(255, 255, 255)
 local labelDistanceColor = Color3.fromRGB(255, 255, 255)
-local labelHealthColor = Color3.fromRGB(255, 255, 255)
+-- Se elimina labelHealthColor, ya que no se usa un color diferente
 
 -- Parámetros de actualización
-local maxDistance = 2500
-local refreshRate = 5   -- en ms
+local maxDistance = 1400   -- Valor por defecto dentro del rango (300 - 1400)
+local refreshRate = 5      -- en ms
 
 ------------------------------------------------
 -- Funciones Auxiliares
@@ -138,6 +140,134 @@ local EspConfigTab = Window:CreateTab("ESP Config", "settings")
 ------------------------------------------------
 -- Definición de funciones de ESP
 ------------------------------------------------
+
+-- Actualizar el BillboardGui en la cabeza (nombre y vida)
+function updatePlayerHeadLabel(player)
+	if not player.Character then return end
+	local head = player.Character:FindFirstChild("Head")
+	if not head then return end
+
+	local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+	if localHRP and hrp then
+		local distance = (hrp.Position - localHRP.Position).Magnitude
+		if distance > maxDistance then
+			local existing = head:FindFirstChild("ESP_HeadGui")
+			if existing then existing:Destroy() end
+			return
+		end
+	end
+
+	if not espEnabled then
+		local existing = head:FindFirstChild("ESP_HeadGui")
+		if existing then existing:Destroy() end
+		return
+	end
+
+	local bg = head:FindFirstChild("ESP_HeadGui")
+	if not bg then
+		bg = Instance.new("BillboardGui")
+		bg.Name = "ESP_HeadGui"
+		bg.Adornee = head
+		bg.Size = UDim2.new(0, 150, 0, 25)
+		-- Se coloca sobre la cabeza
+		bg.StudsOffset = Vector3.new(0, 2, 0)
+		bg.AlwaysOnTop = true
+		bg.Parent = head
+
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Name = "NameLabel"
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.RichText = true
+		nameLabel.TextScaled = false
+		nameLabel.TextSize = nameTextSize
+		nameLabel.Font = Enum.Font.SourceSans
+		nameLabel.TextStrokeTransparency = 0
+		nameLabel.Size = UDim2.new(1, 0, 1, 0)
+		nameLabel.Parent = bg
+	end
+
+	local nameLabel = bg:FindFirstChild("NameLabel")
+	if nameLabel then
+		local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+		local hpText = ""
+		if showHealthEnabled and humanoid then
+			local currentHealth = math.floor(humanoid.Health)
+			local maxHealth = math.floor(humanoid.MaxHealth)
+			hpText = string.format(" [%d / %d]", currentHealth, maxHealth)
+		end
+		nameLabel.Text = string.format(
+			'<font color="%s">%s%s</font>',
+			Color3ToHex(labelNameColor),
+			player.Name,
+			hpText
+		)
+		nameLabel.TextSize = nameTextSize
+		nameLabel.Visible = showNameEnabled
+	end
+end
+
+-- Actualizar el BillboardGui en los pies (studs)
+function updatePlayerFeetLabel(player)
+	if not player.Character then return end
+	-- Buscamos la parte para los pies: LowerTorso o Torso; si no existe, usamos HumanoidRootPart.
+	local feetPart = player.Character:FindFirstChild("LowerTorso") or player.Character:FindFirstChild("Torso") or player.Character:FindFirstChild("HumanoidRootPart")
+	if not feetPart then return end
+
+	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+	local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if localHRP and hrp then
+		local distance = (hrp.Position - localHRP.Position).Magnitude
+		if distance > maxDistance then
+			local existing = feetPart:FindFirstChild("ESP_FeetGui")
+			if existing then existing:Destroy() end
+			return
+		end
+	end
+
+	if not espEnabled then
+		local existing = feetPart:FindFirstChild("ESP_FeetGui")
+		if existing then existing:Destroy() end
+		return
+	end
+
+	local bg = feetPart:FindFirstChild("ESP_FeetGui")
+	if not bg then
+		bg = Instance.new("BillboardGui")
+		bg.Name = "ESP_FeetGui"
+		bg.Adornee = feetPart
+		-- Se mantiene debajo de la parte de los pies con StudsOffset negativo
+		bg.StudsOffset = Vector3.new(0, -3, 0)
+		bg.Size = UDim2.new(0, 150, 0, 25)
+		bg.AlwaysOnTop = true
+		bg.Parent = feetPart
+
+		local distLabel = Instance.new("TextLabel")
+		distLabel.Name = "DistanceLabel"
+		distLabel.BackgroundTransparency = 1
+		distLabel.RichText = true
+		distLabel.TextScaled = false
+		distLabel.TextSize = nameTextSize
+		distLabel.Font = Enum.Font.SourceSans
+		distLabel.TextStrokeTransparency = 0
+		distLabel.Size = UDim2.new(1, 0, 1, 0)
+		distLabel.Parent = bg
+	end
+
+	local distLabel = bg:FindFirstChild("DistanceLabel")
+	if distLabel and localHRP and hrp then
+		local distance = (hrp.Position - localHRP.Position).Magnitude
+		distLabel.Text = string.format(
+			'<font color="%s">%.1f studs</font>',
+			Color3ToHex(labelDistanceColor),
+			distance
+		)
+		distLabel.TextSize = nameTextSize
+		distLabel.Visible = showDistanceEnabled
+	end
+end
+
+-- Función para agregar/actualizar el Highlight (Chams/Outline)
 local function addChams(player, character)
 	local highlight = character:FindFirstChild("ESPHighlight")
 	if not highlight then
@@ -146,15 +276,25 @@ local function addChams(player, character)
 		highlight.Parent = character
 	end
 	
-	-- Si el ESP está desactivado, se deshabilita el highlight y se retorna
 	if not espEnabled then
 		highlight.Enabled = false
 		return
 	end
 	
+	-- Comprobamos la distancia respecto al jugador local
+	local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if localHRP and hrp then
+		local distance = (hrp.Position - localHRP.Position).Magnitude
+		if distance > maxDistance then
+			highlight.Enabled = false
+			return
+		end
+	end
+	
 	highlight.Enabled = true
 	
-	-- Actualizar colores (outline y fill) según whitelist/target/default
+	-- Si el jugador está en whitelist o es target se usan esos colores, de lo contrario se usan los configurables
 	if table.find(WhitelistUsers, player.Name) then
 		highlight.OutlineColor = whitelistColor
 		highlight.FillColor = whitelistColor
@@ -162,18 +302,16 @@ local function addChams(player, character)
 		highlight.OutlineColor = targetColor
 		highlight.FillColor = targetColor
 	else
-		highlight.OutlineColor = defaultColor
-		highlight.FillColor = defaultColor
+		highlight.OutlineColor = outlineColor
+		highlight.FillColor = chamsColor
 	end
 	
-	-- Aplicar modo Chams o solo Outline
 	if showChamsEnabled then
 		highlight.FillTransparency = chamsOpacity
 	else
 		highlight.FillTransparency = 1
 	end
 	
-	-- Ajustamos la visibilidad del outline según showOutlineEnabled
 	if showOutlineEnabled then
 		highlight.OutlineTransparency = 0
 	else
@@ -181,146 +319,82 @@ local function addChams(player, character)
 	end
 end
 
+-- Función para actualizar los Highlights y las etiquetas (head y feet)
 local function updateAllHighlights()
+	local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 	for _, player in ipairs(Players:GetPlayers()) do
 		if player ~= LocalPlayer and player.Character then
-			local highlight = player.Character:FindFirstChild("ESPHighlight")
-			if not highlight then
-				addChams(player, player.Character)
-				highlight = player.Character:FindFirstChild("ESPHighlight")
-			end
-			
-			if not espEnabled then
-				highlight.Enabled = false
-			else
-				highlight.Enabled = true
-				if table.find(WhitelistUsers, player.Name) then
-					highlight.OutlineColor = whitelistColor
-					highlight.FillColor = whitelistColor
-				elseif TargetUser and player.Name == TargetUser then
-					highlight.OutlineColor = targetColor
-					highlight.FillColor = targetColor
-				else
-					highlight.OutlineColor = defaultColor
-					highlight.FillColor = defaultColor
+			local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local highlight = player.Character:FindFirstChild("ESPHighlight")
+				if not highlight then
+					addChams(player, player.Character)
+					highlight = player.Character:FindFirstChild("ESPHighlight")
 				end
 				
-				if showChamsEnabled then
-					highlight.FillTransparency = chamsOpacity
-				else
-					highlight.FillTransparency = 1
-				end
-				
-				if showOutlineEnabled then
-					highlight.OutlineTransparency = 0
-				else
-					highlight.OutlineTransparency = 1
-				end
-			end
-			updatePlayerLabels(player)
-		end
-	end
-end
-
--- Función para crear/actualizar el BillboardGui en el HumanoidRootPart (para labels)
-function updatePlayerLabels(player)
-	if not player.Character then return end
-	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
-	
-	-- Si el ESP está desactivado, se elimina el label y se retorna
-	if not espEnabled then
-		local existing = hrp:FindFirstChild("ESP_NameGui")
-		if existing then existing:Destroy() end
-		return
-	end
-	
-	if showNameEnabled then
-		if not hrp:FindFirstChild("ESP_NameGui") then
-			local bg = Instance.new("BillboardGui")
-			bg.Name = "ESP_NameGui"
-			bg.Adornee = hrp
-			bg.Size = UDim2.new(0, 150, 0, 25)
-			bg.StudsOffset = Vector3.new(0, 2.5, 0)
-			bg.AlwaysOnTop = true
-			
-			local label = Instance.new("TextLabel", bg)
-			label.BackgroundTransparency = 1
-			label.RichText = true
-			label.TextScaled = false
-			label.TextSize = nameTextSize
-			label.Font = Enum.Font.SourceSans
-			label.TextStrokeTransparency = 0
-			label.Size = UDim2.new(1, 0, 1, 0)
-			bg.Parent = hrp
-		end
-		
-		local label = hrp.ESP_NameGui:FindFirstChildOfClass("TextLabel")
-		if label then
-			local distanceText = "N/A"
-			if showDistanceEnabled then
-				local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
 				if localHRP then
-					local dist = (hrp.Position - localHRP.Position).Magnitude
-					if dist > maxDistance then dist = maxDistance end
-					distanceText = string.format("%.1f", dist)
-				end
-			end
-			local healthText = ""
-			if showHealthEnabled then
-				local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-				if humanoid then
-					local currentHealth = math.floor(humanoid.Health)
-					local maxHealth = math.floor(humanoid.MaxHealth)
-					healthText = "HP: " .. currentHealth .. "/" .. maxHealth
+					local distance = (hrp.Position - localHRP.Position).Magnitude
+					if distance > maxDistance or not espEnabled then
+						highlight.Enabled = false
+					else
+						highlight.Enabled = true
+						if table.find(WhitelistUsers, player.Name) then
+							highlight.OutlineColor = whitelistColor
+							highlight.FillColor = whitelistColor
+						elseif TargetUser and player.Name == TargetUser then
+							highlight.OutlineColor = targetColor
+							highlight.FillColor = targetColor
+						else
+							highlight.OutlineColor = outlineColor
+							highlight.FillColor = chamsColor
+						end
+						
+						if showChamsEnabled then
+							highlight.FillTransparency = chamsOpacity
+						else
+							highlight.FillTransparency = 1
+						end
+						
+						if showOutlineEnabled then
+							highlight.OutlineTransparency = 0
+						else
+							highlight.OutlineTransparency = 1
+						end
+					end
 				else
-					healthText = "HP: N/A"
+					highlight.Enabled = espEnabled
 				end
 			end
-			
-			if showDistanceEnabled and showHealthEnabled then
-				label.Text = string.format(
-					'<font color="%s">%s</font> | <font color="%s">%s</font> | <font color="%s">%s</font>',
-					Color3ToHex(labelNameColor), player.Name,
-					Color3ToHex(labelDistanceColor), distanceText,
-					Color3ToHex(labelHealthColor), healthText
-				)
-			elseif showDistanceEnabled then
-				label.Text = string.format(
-					'<font color="%s">%s</font> | <font color="%s">%s</font>',
-					Color3ToHex(labelNameColor), player.Name,
-					Color3ToHex(labelDistanceColor), distanceText
-				)
-			elseif showHealthEnabled then
-				label.Text = string.format(
-					'<font color="%s">%s</font> | <font color="%s">%s</font>',
-					Color3ToHex(labelNameColor), player.Name,
-					Color3ToHex(labelHealthColor), healthText
-				)
-			else
-				label.Text = string.format('<font color="%s">%s</font>', Color3ToHex(labelNameColor), player.Name)
-			end
-			
-			label.TextSize = nameTextSize
-			label.TextStrokeTransparency = 0
+			updatePlayerHeadLabel(player)
+			updatePlayerFeetLabel(player)
 		end
-	else
-		local existing = hrp:FindFirstChild("ESP_NameGui")
-		if existing then existing:Destroy() end
 	end
 end
 
 ------------------------------------------------
--- Bucle para actualizar la información del label continuamente
+-- Bucle para actualizar continuamente los highlights
+------------------------------------------------
+spawn(function()
+	while wait(refreshRate/1000) do
+		updateAllHighlights()
+	end
+end)
+
+------------------------------------------------
+-- Bucle para actualizar la información de los labels continuamente
 ------------------------------------------------
 RunService.Heartbeat:Connect(function()
-	if (showDistanceEnabled or showHealthEnabled) and showNameEnabled then
-		local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-		if localHRP then
-			for _, player in ipairs(Players:GetPlayers()) do
-				if player ~= LocalPlayer and player.Character then
-					updatePlayerLabels(player)
-				end
+	if showNameEnabled then
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer and player.Character then
+				updatePlayerHeadLabel(player)
+			end
+		end
+	end
+	if showDistanceEnabled then
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer and player.Character then
+				updatePlayerFeetLabel(player)
 			end
 		end
 	end
@@ -376,7 +450,6 @@ local WhitelistInput = MainTab:CreateInput({
             if not table.find(WhitelistUsers, foundPlayer.Name) then
                table.insert(WhitelistUsers, foundPlayer.Name)
                print("Whitelisting user:", foundPlayer.Name)
-               -- Actualizamos el ESP del jugador de inmediato
                if foundPlayer.Character then
                   addChams(foundPlayer, foundPlayer.Character)
                end
@@ -406,7 +479,6 @@ WhitelistDropdown = MainTab:CreateDropdown({
             if v == selected then
                table.remove(WhitelistUsers, i)
                print("Removed whitelisted user:", selected)
-               -- Forzamos la actualización del jugador removido
                for _, player in ipairs(Players:GetPlayers()) do
                   if player.Name == selected and player.Character then
                      addChams(player, player.Character)
@@ -470,7 +542,6 @@ local TargetInput = MainTab:CreateInput({
    end),
 })
 
-
 TargetDropdown = MainTab:CreateDropdown({
    Name = "Targeted User (Click to remove)",
    Options = TargetUser and {TargetUser} or {},
@@ -482,7 +553,6 @@ TargetDropdown = MainTab:CreateDropdown({
       if selected then
          print("Removed target user:", selected)
          TargetUser = nil
-         -- Forzamos la actualización del jugador removido
          for _, player in ipairs(Players:GetPlayers()) do
             if player.Name == selected and player.Character then
                addChams(player, player.Character)
@@ -521,15 +591,26 @@ local ColorPickerTarget = ColorsTab:CreateColorPicker({
     end),
 })
 
-local ColorPickerDefault = ColorsTab:CreateColorPicker({
-    Name = "Default Color",
-    Color = defaultColor,
-    Flag = "Color_Default",
-    Callback = safeCallback(function(Value)
-        defaultColor = Value
-        print("Default color set to:", defaultColor)
-        updateAllHighlights()
-    end),
+local ColorPickerChams = ColorsTab:CreateColorPicker({
+   Name = "Chams Color",
+   Color = chamsColor,
+   Flag = "Color_Chams",
+   Callback = safeCallback(function(Value)
+      chamsColor = Value
+      print("Chams color set to:", chamsColor)
+      updateAllHighlights()
+   end),
+})
+
+local ColorPickerOutline = ColorsTab:CreateColorPicker({
+   Name = "Outline Color",
+   Color = outlineColor,
+   Flag = "Color_Outline",
+   Callback = safeCallback(function(Value)
+      outlineColor = Value
+      print("Outline color set to:", outlineColor)
+      updateAllHighlights()
+   end),
 })
 
 -- Sección para elegir los colores manuales del label
@@ -542,7 +623,7 @@ local nameColorPicker = ColorsTab:CreateColorPicker({
       labelNameColor = Value
       for _, player in ipairs(Players:GetPlayers()) do
          if player ~= LocalPlayer then
-            updatePlayerLabels(player)
+            updatePlayerHeadLabel(player)
          end
       end
    end),
@@ -555,24 +636,12 @@ local distanceColorPicker = ColorsTab:CreateColorPicker({
       labelDistanceColor = Value
       for _, player in ipairs(Players:GetPlayers()) do
          if player ~= LocalPlayer then
-            updatePlayerLabels(player)
+            updatePlayerFeetLabel(player)
          end
       end
    end),
 })
-local healthColorPicker = ColorsTab:CreateColorPicker({
-   Name = "Health Color",
-   Color = labelHealthColor,
-   Flag = "Label_HealthColor",
-   Callback = safeCallback(function(Value)
-      labelHealthColor = Value
-      for _, player in ipairs(Players:GetPlayers()) do
-         if player ~= LocalPlayer then
-            updatePlayerLabels(player)
-         end
-      end
-   end),
-})
+-- Se elimina el picker de Health Color
 
 ------------------------------------------------
 -- Sección: ESP Config
@@ -586,7 +655,7 @@ local nameToggle = EspConfigTab:CreateToggle({
       showNameEnabled = Value
       for _, player in ipairs(Players:GetPlayers()) do
          if player ~= LocalPlayer then
-            updatePlayerLabels(player)
+            updatePlayerHeadLabel(player)
          end
       end
    end),
@@ -599,7 +668,7 @@ local distanceToggle = EspConfigTab:CreateToggle({
       showDistanceEnabled = Value
       for _, player in ipairs(Players:GetPlayers()) do
          if player ~= LocalPlayer then
-            updatePlayerLabels(player)
+            updatePlayerFeetLabel(player)
          end
       end
    end),
@@ -612,7 +681,7 @@ local healthToggle = EspConfigTab:CreateToggle({
       showHealthEnabled = Value
       for _, player in ipairs(Players:GetPlayers()) do
          if player ~= LocalPlayer then
-            updatePlayerLabels(player)
+            updatePlayerHeadLabel(player)
          end
       end
    end),
@@ -628,7 +697,8 @@ local nameSizeSlider = EspConfigTab:CreateSlider({
       nameTextSize = Value
       for _, player in ipairs(Players:GetPlayers()) do
          if player ~= LocalPlayer then
-            updatePlayerLabels(player)
+            updatePlayerHeadLabel(player)
+            updatePlayerFeetLabel(player)
          end
       end
    end),
@@ -665,6 +735,19 @@ local chamsOpacitySlider = EspConfigTab:CreateSlider({
       updateAllHighlights()
    end),
 })
+-- NUEVA OPCIÓN: Slider para ajustar la distancia máxima (studs)
+local maxDistanceSlider = EspConfigTab:CreateSlider({
+   Name = "ESP Max Distance",
+   Range = {300, 1400},
+   Increment = 10,
+   Suffix = " studs",
+   CurrentValue = maxDistance,
+   Flag = "ESP_MaxDistance",
+   Callback = safeCallback(function(Value)
+      maxDistance = Value
+      updateAllHighlights()
+   end),
+})
 
 ------------------------------------------------
 -- Aplicar ESP a jugadores existentes y nuevos
@@ -673,12 +756,14 @@ for _, player in ipairs(Players:GetPlayers()) do
 	if player ~= LocalPlayer then
 		if player.Character then
 			addChams(player, player.Character)
-			updatePlayerLabels(player)
+			updatePlayerHeadLabel(player)
+			updatePlayerFeetLabel(player)
 		end
 		player.CharacterAdded:Connect(function(char)
-			char:WaitForChild("HumanoidRootPart", 5)
+			char:WaitForChild("Head", 5)
 			addChams(player, char)
-			updatePlayerLabels(player)
+			updatePlayerHeadLabel(player)
+			updatePlayerFeetLabel(player)
 		end)
 	end
 end
@@ -686,9 +771,10 @@ end
 Players.PlayerAdded:Connect(function(player)
 	if player ~= LocalPlayer then
 		player.CharacterAdded:Connect(function(char)
-			char:WaitForChild("HumanoidRootPart", 5)
+			char:WaitForChild("Head", 5)
 			addChams(player, char)
-			updatePlayerLabels(player)
+			updatePlayerHeadLabel(player)
+			updatePlayerFeetLabel(player)
 		end)
 	end
 end)
