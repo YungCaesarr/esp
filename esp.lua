@@ -129,43 +129,6 @@ end
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 ------------------------------------------------
--- THEME
-------------------------------------------------
-local customTheme = {
-	TextColor = Color3.fromRGB(230,230,250),
-	Background = Color3.fromRGB(20,20,30),
-	Topbar = Color3.fromRGB(30,30,40),
-	Shadow = Color3.fromRGB(10,10,15),
-	NotificationBackground = Color3.fromRGB(20,20,30),
-	NotificationActionsBackground = Color3.fromRGB(220,220,240),
-	TabBackground = Color3.fromRGB(25,25,35),
-	TabStroke = Color3.fromRGB(45,45,55),
-	TabBackgroundSelected = Color3.fromRGB(70,70,90),
-	TabTextColor = Color3.fromRGB(230,230,250),
-	SelectedTabTextColor = Color3.fromRGB(255,255,255),
-	ElementBackground = Color3.fromRGB(25,25,35),
-	ElementBackgroundHover = Color3.fromRGB(30,30,45),
-	SecondaryElementBackground = Color3.fromRGB(20,20,30),
-	ElementStroke = Color3.fromRGB(50,50,60),
-	SecondaryElementStroke = Color3.fromRGB(35,35,45),
-	SliderBackground = Color3.fromRGB(45,45,65),
-	SliderProgress = Color3.fromRGB(45,45,65),
-	SliderStroke = Color3.fromRGB(55,55,75),
-	ToggleBackground = Color3.fromRGB(20,20,30),
-	ToggleEnabled = Color3.fromRGB(90,70,140),
-	ToggleDisabled = Color3.fromRGB(70,70,70),
-	ToggleEnabledStroke = Color3.fromRGB(100,80,150),
-	ToggleDisabledStroke = Color3.fromRGB(80,80,80),
-	ToggleEnabledOuterStroke = Color3.fromRGB(100,80,150),
-	ToggleDisabledOuterStroke = Color3.fromRGB(80,80,80),
-	DropdownSelected = Color3.fromRGB(25,25,35),
-	DropdownUnselected = Color3.fromRGB(20,20,30),
-	InputBackground = Color3.fromRGB(20,20,30),
-	InputStroke = Color3.fromRGB(50,50,60),
-	PlaceholderColor = Color3.fromRGB(150,150,170)
-}
-
-------------------------------------------------
 -- WINDOW
 ------------------------------------------------
 local Window = Rayfield:CreateWindow({
@@ -173,7 +136,6 @@ local Window = Rayfield:CreateWindow({
 	Icon = "rewind",
 	LoadingTitle = "YungCaesar Hub",
 	LoadingSubtitle = "by YungCaesar",
-	Theme = customTheme,
 
 	ConfigurationSaving = {
 		Enabled = true,
@@ -420,14 +382,17 @@ MainTab:CreateToggle({
 })
 
 ------------------------------------------------
--- TOGGLE KEY CHANGER
+-- KEYBIND CONFIG
 ------------------------------------------------
 local keyOptions = {
-	"K","L","J","H","F1","F2","F3","F4","Insert","Home","End","RightShift"
+	"K","L","J","H",
+	"F1","F2","F3","F4","F5","F6",
+	"Insert","Home","End",
+	"RightShift","LeftShift"
 }
 
 ConfigTab:CreateDropdown({
-	Name = "Choose Toggle Key",
+	Name = "Choose UI Toggle Key",
 	Options = keyOptions,
 	CurrentOption = {"K"},
 	MultipleOptions = false,
@@ -438,7 +403,26 @@ ConfigTab:CreateDropdown({
 
 		if selected and Enum.KeyCode[selected] then
 			uiToggleKey = Enum.KeyCode[selected]
-			print("UI Toggle Key:",selected)
+
+			print("UI Toggle Key:", selected)
+		end
+	end)
+})
+
+ConfigTab:CreateDropdown({
+	Name = "Choose ESP Toggle Key",
+	Options = keyOptions,
+	CurrentOption = {"F3"},
+	MultipleOptions = false,
+	Flag = "ESP_KEY",
+
+	Callback = safeCallback(function(option)
+		local selected = typeof(option) == "table" and option[1] or option
+
+		if selected and Enum.KeyCode[selected] then
+			espToggleKey = Enum.KeyCode[selected]
+
+			print("ESP Toggle Key:", selected)
 		end
 	end)
 })
@@ -678,7 +662,7 @@ Players.PlayerAdded:Connect(setupPlayer)
 Rayfield:LoadConfiguration()
 
 ------------------------------------------------
--- KEYBINDS
+-- TOGGLE UI
 ------------------------------------------------
 local function toggleUI()
 	for _, gui in ipairs(CoreGui:GetChildren()) do
@@ -688,6 +672,9 @@ local function toggleUI()
 	end
 end
 
+------------------------------------------------
+-- KEYBINDS
+------------------------------------------------
 UserInputService.InputBegan:Connect(safeCallback(function(input, gameProcessed)
 	if gameProcessed then
 		return
