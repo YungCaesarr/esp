@@ -1,66 +1,63 @@
 ------------------------------------------------
--- VARIABLES Y SERVICIOS
+-- Variables y servicios
 ------------------------------------------------
-
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-
-------------------------------------------------
--- CONFIG
-------------------------------------------------
+local CoreGui = game:GetService("CoreGui")
 
 local espEnabled = true
 
-local whitelistColor = Color3.fromRGB(0,255,255)
-local targetColor = Color3.fromRGB(255,255,0)
+-- Colores para el Highlight
+local whitelistColor = Color3.fromRGB(0, 255, 255)
+local targetColor    = Color3.fromRGB(255, 255, 0)
+local chamsColor     = Color3.fromRGB(255, 255, 255)
+local outlineColor   = Color3.fromRGB(0, 0, 0)
 
-local chamsColor = Color3.fromRGB(255,255,255)
-local outlineColor = Color3.fromRGB(0,0,0)
-
+-- Listas para whitelist y target
 local WhitelistUsers = {}
 local TargetUser = nil
 
+-- Variables para ESP Config
 local showNameEnabled = false
 local showDistanceEnabled = false
 local showHealthEnabled = false
 
+-- Variables para elegir el tipo de ESP
 local showOutlineEnabled = true
 local showChamsEnabled = false
 
+-- Opacidad de Chams
 local chamsOpacity = 0.5
 
+-- Tamaño del texto
 local nameTextSize = 12
 
-local labelNameColor = Color3.fromRGB(255,255,255)
-local labelDistanceColor = Color3.fromRGB(255,255,255)
+-- Color de labels
+local labelNameColor = Color3.fromRGB(255, 255, 255)
+local labelDistanceColor = Color3.fromRGB(255, 255, 255)
 
+-- Parámetros de actualización
 local maxDistance = 1400
 local refreshRate = 5
 
-------------------------------------------------
--- TOGGLE KEYS
-------------------------------------------------
-
+-- Toggle keys
 local uiToggleKey = Enum.KeyCode.K
 local espToggleKey = Enum.KeyCode.F3
 
 ------------------------------------------------
--- HELPERS
+-- Funciones Auxiliares
 ------------------------------------------------
-
 local function trim(s)
 	return (s:gsub("^%s*(.-)%s*$", "%1"))
 end
 
 local function getInitials(str)
 	local initials = ""
-
-	for word in string.gmatch(str,"%S+") do
+	for word in string.gmatch(str or "", "%S+") do
 		initials = initials .. word:sub(1,1)
 	end
-
 	return initials:upper()
 end
 
@@ -75,40 +72,37 @@ end
 
 local function safeCallback(callback)
 	return function(...)
-		local success, err = pcall(callback,...)
-
+		local success, err = pcall(callback, ...)
 		if not success then
-			warn("Callback error:", err)
+			warn("Callback error: " .. tostring(err))
 		end
 	end
 end
 
-------------------------------------------------
--- PLAYER FINDER
-------------------------------------------------
+local function isShiftDown()
+	return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+end
 
-local function findPlayer(inputText)
-	inputText = trim(inputText)
-
+local function findPlayerByInput(inputText)
+	inputText = trim(inputText or "")
 	if inputText == "" then
 		return nil
 	end
 
 	local inputLen = #inputText
+	local lowerInput = string.lower(inputText)
 
 	for _, player in ipairs(Players:GetPlayers()) do
-		local name = player.Name
+		local name = player.Name or ""
 		local display = player.DisplayName or ""
+		local displayInitials = getInitials(display)
 
-		local initials = getInitials(display)
-
-		if
-			string.lower(name) == string.lower(inputText)
-			or string.lower(display) == string.lower(inputText)
-			or string.lower(name:sub(1,inputLen)) == string.lower(inputText)
-			or string.lower(display:sub(1,inputLen)) == string.lower(inputText)
-			or string.lower(initials) == string.lower(inputText)
-			or string.lower(initials:sub(1,inputLen)) == string.lower(inputText)
+		if string.lower(name) == lowerInput
+			or string.lower(display) == lowerInput
+			or string.lower(name:sub(1, inputLen)) == lowerInput
+			or string.lower(display:sub(1, inputLen)) == lowerInput
+			or string.lower(displayInitials) == lowerInput
+			or string.lower(displayInitials:sub(1, inputLen)) == lowerInput
 		then
 			return player
 		end
@@ -117,53 +111,94 @@ local function findPlayer(inputText)
 	return nil
 end
 
-------------------------------------------------
--- RAYFIELD
-------------------------------------------------
+local function getLocalHRP()
+	local char = LocalPlayer.Character
+	return char and char:FindFirstChild("HumanoidRootPart")
+end
 
+local function getDistanceToLocal(hrp)
+	local localHRP = getLocalHRP()
+	if not localHRP or not hrp then
+		return math.huge
+	end
+	return (hrp.Position - localHRP.Position).Magnitude
+end
+
+local function getESPColors(player)
+	if table.find(WhitelistUsers, player.Name) then
+		return whitelistColor, whitelistColor
+	elseif TargetUser and player.Name == TargetUser then
+		return targetColor, targetColor
+	end
+	return outlineColor, chamsColor
+end
+
+local function removeBillboardGui(part, guiName)
+	if not part then return end
+	local existing = part:FindFirstChild(guiName)
+	if existing then
+		existing:Destroy()
+	end
+end
+
+local function removeHighlight(character)
+	if not character then return end
+	local existing = character:FindFirstChild("ESPHighlight")
+	if existing then
+		existing:Destroy()
+	end
+end
+
+local function toggleUI()
+	for _, gui in ipairs(CoreGui:GetChildren()) do
+		if gui:IsA("ScreenGui") and string.find(string.lower(gui.Name), "rayfield") then
+			gui.Enabled = not gui.Enabled
+			return
+		end
+	end
+end
+
+------------------------------------------------
+-- Cargar Rayfield UI Library
+------------------------------------------------
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 ------------------------------------------------
--- THEME
+-- Crear Ventana y Tabs
 ------------------------------------------------
-
 local customTheme = {
-	TextColor = Color3.fromRGB(230,230,250),
-	Background = Color3.fromRGB(20,20,30),
-	Topbar = Color3.fromRGB(30,30,40),
-	Shadow = Color3.fromRGB(10,10,15),
-	NotificationBackground = Color3.fromRGB(20,20,30),
-	NotificationActionsBackground = Color3.fromRGB(220,220,240),
-	TabBackground = Color3.fromRGB(25,25,35),
-	TabStroke = Color3.fromRGB(45,45,55),
-	TabBackgroundSelected = Color3.fromRGB(70,70,90),
-	TabTextColor = Color3.fromRGB(230,230,250),
-	SelectedTabTextColor = Color3.fromRGB(255,255,255),
-	ElementBackground = Color3.fromRGB(25,25,35),
-	ElementBackgroundHover = Color3.fromRGB(30,30,45),
-	SecondaryElementBackground = Color3.fromRGB(20,20,30),
-	ElementStroke = Color3.fromRGB(50,50,60),
-	SecondaryElementStroke = Color3.fromRGB(35,35,45),
-	SliderBackground = Color3.fromRGB(45,45,65),
-	SliderProgress = Color3.fromRGB(45,45,65),
-	SliderStroke = Color3.fromRGB(55,55,75),
-	ToggleBackground = Color3.fromRGB(20,20,30),
-	ToggleEnabled = Color3.fromRGB(90,70,140),
-	ToggleDisabled = Color3.fromRGB(70,70,70),
-	ToggleEnabledStroke = Color3.fromRGB(100,80,150),
-	ToggleDisabledStroke = Color3.fromRGB(80,80,80),
-	ToggleEnabledOuterStroke = Color3.fromRGB(100,80,150),
-	ToggleDisabledOuterStroke = Color3.fromRGB(80,80,80),
-	DropdownSelected = Color3.fromRGB(25,25,35),
-	DropdownUnselected = Color3.fromRGB(20,20,30),
-	InputBackground = Color3.fromRGB(20,20,30),
-	InputStroke = Color3.fromRGB(50,50,60),
-	PlaceholderColor = Color3.fromRGB(150,150,170)
+	TextColor = Color3.fromRGB(230, 230, 250),
+	Background = Color3.fromRGB(20, 20, 30),
+	Topbar = Color3.fromRGB(30, 30, 40),
+	Shadow = Color3.fromRGB(10, 10, 15),
+	NotificationBackground = Color3.fromRGB(20, 20, 30),
+	NotificationActionsBackground = Color3.fromRGB(220, 220, 240),
+	TabBackground = Color3.fromRGB(25, 25, 35),
+	TabStroke = Color3.fromRGB(45, 45, 55),
+	TabBackgroundSelected = Color3.fromRGB(70, 70, 90),
+	TabTextColor = Color3.fromRGB(230, 230, 250),
+	SelectedTabTextColor = Color3.fromRGB(255, 255, 255),
+	ElementBackground = Color3.fromRGB(25, 25, 35),
+	ElementBackgroundHover = Color3.fromRGB(30, 30, 45),
+	SecondaryElementBackground = Color3.fromRGB(20, 20, 30),
+	ElementStroke = Color3.fromRGB(50, 50, 60),
+	SecondaryElementStroke = Color3.fromRGB(35, 35, 45),
+	SliderBackground = Color3.fromRGB(45, 45, 65),
+	SliderProgress = Color3.fromRGB(45, 45, 65),
+	SliderStroke = Color3.fromRGB(55, 55, 75),
+	ToggleBackground = Color3.fromRGB(20, 20, 30),
+	ToggleEnabled = Color3.fromRGB(90, 70, 140),
+	ToggleDisabled = Color3.fromRGB(70, 70, 70),
+	ToggleEnabledStroke = Color3.fromRGB(100, 80, 150),
+	ToggleDisabledStroke = Color3.fromRGB(80, 80, 80),
+	ToggleEnabledOuterStroke = Color3.fromRGB(100, 80, 150),
+	ToggleDisabledOuterStroke = Color3.fromRGB(80, 80, 80),
+	DropdownSelected = Color3.fromRGB(25, 25, 35),
+	DropdownUnselected = Color3.fromRGB(20, 20, 30),
+	InputBackground = Color3.fromRGB(20, 20, 30),
+	InputStroke = Color3.fromRGB(50, 50, 60),
+	PlaceholderColor = Color3.fromRGB(150, 150, 170)
 }
-
-------------------------------------------------
--- WINDOW
-------------------------------------------------
 
 local Window = Rayfield:CreateWindow({
 	Name = "YungCaesar Hub",
@@ -171,61 +206,160 @@ local Window = Rayfield:CreateWindow({
 	LoadingTitle = "YungCaesar Hub",
 	LoadingSubtitle = "by YungCaesar",
 	Theme = customTheme,
-
 	ConfigurationSaving = {
 		Enabled = true,
 		FileName = "YungCaesarHub"
 	},
-
 	Discord = {
 		Enabled = false,
 		Invite = "",
 		RememberJoins = true
 	},
-
-	KeySystem = false
+	KeySystem = false,
 })
 
-------------------------------------------------
--- TABS
-------------------------------------------------
-
-local MainTab = Window:CreateTab("Main",4483362458)
-local ColorsTab = Window:CreateTab("ESP Colors","palette")
-local EspConfigTab = Window:CreateTab("ESP Config","settings")
+-- Crear pestañas:
+local MainTab = Window:CreateTab("Main", 4483362458)
+local ColorsTab = Window:CreateTab("ESP Colors", "palette")
+local EspConfigTab = Window:CreateTab("ESP Config", "settings")
 
 ------------------------------------------------
--- ESP FUNCTIONS
+-- Definición de funciones de ESP
 ------------------------------------------------
 
-local function getHighlightColor(player)
-	if table.find(WhitelistUsers,player.Name) then
-		return whitelistColor
+function updatePlayerHeadLabel(player)
+	if not player.Character then return end
+	local head = player.Character:FindFirstChild("Head")
+	if not head then return end
+
+	local localHRP = getLocalHRP()
+	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+
+	if localHRP and hrp then
+		local distance = (hrp.Position - localHRP.Position).Magnitude
+		if distance > maxDistance then
+			removeBillboardGui(head, "ESP_HeadGui")
+			return
+		end
 	end
 
-	if TargetUser and player.Name == TargetUser then
-		return targetColor
+	if not espEnabled or not showNameEnabled then
+		removeBillboardGui(head, "ESP_HeadGui")
+		return
 	end
 
-	return chamsColor
+	local bg = head:FindFirstChild("ESP_HeadGui")
+	if not bg then
+		bg = Instance.new("BillboardGui")
+		bg.Name = "ESP_HeadGui"
+		bg.Adornee = head
+		bg.Size = UDim2.new(0, 150, 0, 25)
+		bg.StudsOffset = Vector3.new(0, 2, 0)
+		bg.AlwaysOnTop = true
+		bg.Parent = head
+
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Name = "NameLabel"
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.RichText = true
+		nameLabel.TextScaled = false
+		nameLabel.TextSize = nameTextSize
+		nameLabel.Font = Enum.Font.SourceSans
+		nameLabel.TextStrokeTransparency = 0
+		nameLabel.Size = UDim2.new(1, 0, 1, 0)
+		nameLabel.Parent = bg
+	end
+
+	local nameLabel = bg:FindFirstChild("NameLabel")
+	if nameLabel then
+		local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+		local hpText = ""
+
+		if showHealthEnabled and humanoid then
+			local currentHealth = math.floor(humanoid.Health)
+			local maxHealth = math.floor(humanoid.MaxHealth)
+			hpText = string.format(" [%d / %d]", currentHealth, maxHealth)
+		end
+
+		nameLabel.Text = string.format(
+			'<font color="%s">%s%s</font>',
+			Color3ToHex(labelNameColor),
+			player.Name,
+			hpText
+		)
+
+		nameLabel.TextSize = nameTextSize
+		nameLabel.Visible = showNameEnabled
+	end
 end
 
-local function updateHighlight(player)
-	if not player.Character then
+function updatePlayerFeetLabel(player)
+	if not player.Character then return end
+
+	local feetPart =
+		player.Character:FindFirstChild("LowerTorso")
+		or player.Character:FindFirstChild("Torso")
+		or player.Character:FindFirstChild("HumanoidRootPart")
+
+	if not feetPart then return end
+
+	if not showDistanceEnabled then
+		removeBillboardGui(feetPart, "ESP_FeetGui")
 		return
 	end
 
-	local character = player.Character
-	local hrp = character:FindFirstChild("HumanoidRootPart")
+	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+	local localHRP = getLocalHRP()
 
-	if not hrp then
+	if localHRP and hrp then
+		local distance = (hrp.Position - localHRP.Position).Magnitude
+		if distance > maxDistance then
+			removeBillboardGui(feetPart, "ESP_FeetGui")
+			return
+		end
+	end
+
+	if not espEnabled then
+		removeBillboardGui(feetPart, "ESP_FeetGui")
 		return
 	end
 
-	local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+	local bg = feetPart:FindFirstChild("ESP_FeetGui")
+	if not bg then
+		bg = Instance.new("BillboardGui")
+		bg.Name = "ESP_FeetGui"
+		bg.Adornee = feetPart
+		bg.StudsOffset = Vector3.new(0, -3, 0)
+		bg.Size = UDim2.new(0, 150, 0, 25)
+		bg.AlwaysOnTop = true
+		bg.Parent = feetPart
 
+		local distLabel = Instance.new("TextLabel")
+		distLabel.Name = "DistanceLabel"
+		distLabel.BackgroundTransparency = 1
+		distLabel.RichText = true
+		distLabel.TextScaled = false
+		distLabel.TextSize = nameTextSize
+		distLabel.Font = Enum.Font.SourceSans
+		distLabel.TextStrokeTransparency = 0
+		distLabel.Size = UDim2.new(1, 0, 1, 0)
+		distLabel.Parent = bg
+	end
+
+	local distLabel = bg:FindFirstChild("DistanceLabel")
+	if distLabel and localHRP and hrp then
+		local distance = (hrp.Position - localHRP.Position).Magnitude
+		distLabel.Text = string.format(
+			'<font color="%s">%.1f studs</font>',
+			Color3ToHex(labelDistanceColor),
+			distance
+		)
+		distLabel.TextSize = nameTextSize
+	end
+end
+
+local function addChams(player, character)
 	local highlight = character:FindFirstChild("ESPHighlight")
-
 	if not highlight then
 		highlight = Instance.new("Highlight")
 		highlight.Name = "ESPHighlight"
@@ -237,9 +371,10 @@ local function updateHighlight(player)
 		return
 	end
 
-	if localHRP then
+	local localHRP = getLocalHRP()
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if localHRP and hrp then
 		local distance = (hrp.Position - localHRP.Position).Magnitude
-
 		if distance > maxDistance then
 			highlight.Enabled = false
 			return
@@ -248,193 +383,45 @@ local function updateHighlight(player)
 
 	highlight.Enabled = true
 
-	local color = getHighlightColor(player)
+	if table.find(WhitelistUsers, player.Name) then
+		highlight.OutlineColor = whitelistColor
+		highlight.FillColor = whitelistColor
+	elseif TargetUser and player.Name == TargetUser then
+		highlight.OutlineColor = targetColor
+		highlight.FillColor = targetColor
+	else
+		highlight.OutlineColor = outlineColor
+		highlight.FillColor = chamsColor
+	end
 
-	highlight.FillColor = color
-	highlight.OutlineColor = outlineColor
+	if showChamsEnabled then
+		highlight.FillTransparency = chamsOpacity
+	else
+		highlight.FillTransparency = 1
+	end
 
-	highlight.FillTransparency = showChamsEnabled and chamsOpacity or 1
-	highlight.OutlineTransparency = showOutlineEnabled and 0 or 1
+	if showOutlineEnabled then
+		highlight.OutlineTransparency = 0
+	else
+		highlight.OutlineTransparency = 1
+	end
 end
 
-------------------------------------------------
--- HEAD LABEL
-------------------------------------------------
+local function updateAllHighlights()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local highlight = player.Character:FindFirstChild("ESPHighlight")
+				if not highlight then
+					addChams(player, player.Character)
+				end
 
-local function updatePlayerHeadLabel(player)
-	if not player.Character then
-		return
-	end
-
-	local head = player.Character:FindFirstChild("Head")
-
-	if not head then
-		return
-	end
-
-	local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-
-	if localHRP and hrp then
-		local distance = (hrp.Position - localHRP.Position).Magnitude
-
-		if distance > maxDistance then
-			local existing = head:FindFirstChild("ESP_HeadGui")
-
-			if existing then
-				existing:Destroy()
+				if player.Character:FindFirstChild("ESPHighlight") then
+					addChams(player, player.Character)
+				end
 			end
 
-			return
-		end
-	end
-
-	if not espEnabled or not showNameEnabled then
-		local existing = head:FindFirstChild("ESP_HeadGui")
-
-		if existing then
-			existing:Destroy()
-		end
-
-		return
-	end
-
-	local bg = head:FindFirstChild("ESP_HeadGui")
-
-	if not bg then
-		bg = Instance.new("BillboardGui")
-		bg.Name = "ESP_HeadGui"
-		bg.Adornee = head
-		bg.Size = UDim2.new(0,150,0,25)
-		bg.StudsOffset = Vector3.new(0,2,0)
-		bg.AlwaysOnTop = true
-		bg.Parent = head
-
-		local label = Instance.new("TextLabel")
-		label.Name = "NameLabel"
-		label.BackgroundTransparency = 1
-		label.RichText = true
-		label.Size = UDim2.new(1,0,1,0)
-		label.Font = Enum.Font.SourceSansBold
-		label.TextStrokeTransparency = 0
-		label.Parent = bg
-	end
-
-	local label = bg:FindFirstChild("NameLabel")
-
-	if label then
-		local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-
-		local hpText = ""
-
-		if humanoid and showHealthEnabled then
-			hpText = string.format(
-				" [%d/%d]",
-				math.floor(humanoid.Health),
-				math.floor(humanoid.MaxHealth)
-			)
-		end
-
-		label.Text = string.format(
-			'<font color="%s">%s%s</font>',
-			Color3ToHex(labelNameColor),
-			player.Name,
-			hpText
-		)
-
-		label.TextSize = nameTextSize
-	end
-end
-
-------------------------------------------------
--- FEET LABEL
-------------------------------------------------
-
-local function updatePlayerFeetLabel(player)
-	if not player.Character then
-		return
-	end
-
-	local feetPart =
-		player.Character:FindFirstChild("LowerTorso")
-		or player.Character:FindFirstChild("Torso")
-		or player.Character:FindFirstChild("HumanoidRootPart")
-
-	if not feetPart then
-		return
-	end
-
-	if not espEnabled or not showDistanceEnabled then
-		local existing = feetPart:FindFirstChild("ESP_FeetGui")
-
-		if existing then
-			existing:Destroy()
-		end
-
-		return
-	end
-
-	local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-	local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-
-	if not localHRP or not hrp then
-		return
-	end
-
-	local distance = (hrp.Position - localHRP.Position).Magnitude
-
-	if distance > maxDistance then
-		local existing = feetPart:FindFirstChild("ESP_FeetGui")
-
-		if existing then
-			existing:Destroy()
-		end
-
-		return
-	end
-
-	local bg = feetPart:FindFirstChild("ESP_FeetGui")
-
-	if not bg then
-		bg = Instance.new("BillboardGui")
-		bg.Name = "ESP_FeetGui"
-		bg.Adornee = feetPart
-		bg.Size = UDim2.new(0,150,0,25)
-		bg.StudsOffset = Vector3.new(0,-3,0)
-		bg.AlwaysOnTop = true
-		bg.Parent = feetPart
-
-		local label = Instance.new("TextLabel")
-		label.Name = "DistanceLabel"
-		label.BackgroundTransparency = 1
-		label.RichText = true
-		label.Size = UDim2.new(1,0,1,0)
-		label.Font = Enum.Font.SourceSansBold
-		label.TextStrokeTransparency = 0
-		label.Parent = bg
-	end
-
-	local label = bg:FindFirstChild("DistanceLabel")
-
-	if label then
-		label.Text = string.format(
-			'<font color="%s">%.1f studs</font>',
-			Color3ToHex(labelDistanceColor),
-			distance
-		)
-
-		label.TextSize = nameTextSize
-	end
-end
-
-------------------------------------------------
--- UPDATE ALL
-------------------------------------------------
-
-local function updateAllESP()
-	for _, player in ipairs(Players:GetPlayers()) do
-		if player ~= LocalPlayer then
-			updateHighlight(player)
 			updatePlayerHeadLabel(player)
 			updatePlayerFeetLabel(player)
 		end
@@ -442,353 +429,430 @@ local function updateAllESP()
 end
 
 ------------------------------------------------
--- LOOPS
+-- Loop para actualizar continuamente los highlights
 ------------------------------------------------
-
 task.spawn(function()
-	while true do
-		task.wait(refreshRate / 1000)
-		updateAllESP()
+	while task.wait(refreshRate / 1000) do
+		updateAllHighlights()
 	end
 end)
 
 ------------------------------------------------
--- MAIN UI
+-- Crear UI en la pestaña Main
 ------------------------------------------------
+local ESPSection = MainTab:CreateSection("ESP Options")
 
-MainTab:CreateSection("ESP")
-
-MainTab:CreateToggle({
+local ToggleESP = MainTab:CreateToggle({
 	Name = "Activate ESP",
 	CurrentValue = espEnabled,
-	Flag = "ESP_ENABLED",
+	Flag = "ESP_Toggle",
 	Callback = safeCallback(function(Value)
 		espEnabled = Value
-		updateAllESP()
-	end)
+		print("ESP is now:", espEnabled and "Enabled" or "Disabled")
+		updateAllHighlights()
+	end),
 })
 
 ------------------------------------------------
--- CHOOSE UI TOGGLE KEY
+-- Toggle key configurable
 ------------------------------------------------
-
-MainTab:CreateInput({
-	Name = "Choose UI Toggle Key",
-	PlaceholderText = "Example: K, L, F1",
+EspConfigTab:CreateInput({
+	Name = "Choose Toggle Key",
+	PlaceholderText = "Example: K, F1, Insert",
 	RemoveTextAfterFocusLost = false,
-	Flag = "UI_KEY",
+	Flag = "UI_Toggle_Key",
 	Callback = safeCallback(function(Text)
-
-		Text = string.upper(trim(Text))
-
-		local success, result = pcall(function()
-			return Enum.KeyCode[Text]
-		end)
-
-		if success and result then
-			uiToggleKey = result
-			print("UI Toggle Key:", Text)
+		local keyName = string.upper(trim(Text or ""))
+		if keyName ~= "" and Enum.KeyCode[keyName] then
+			uiToggleKey = Enum.KeyCode[keyName]
+			print("UI Toggle Key:", keyName)
 		else
-			warn("Invalid UI key.")
+			warn("Invalid toggle key:", tostring(Text))
 		end
-	end)
+	end),
 })
 
 ------------------------------------------------
--- CHOOSE ESP TOGGLE KEY
+-- Sección: Whitelist Options
 ------------------------------------------------
-
-MainTab:CreateInput({
-	Name = "Choose ESP Toggle Key",
-	PlaceholderText = "Example: F3, H, J",
-	RemoveTextAfterFocusLost = false,
-	Flag = "ESP_KEY",
-	Callback = safeCallback(function(Text)
-
-		Text = string.upper(trim(Text))
-
-		local success, result = pcall(function()
-			return Enum.KeyCode[Text]
-		end)
-
-		if success and result then
-			espToggleKey = result
-			print("ESP Toggle Key:", Text)
-		else
-			warn("Invalid ESP key.")
-		end
-	end)
-})
-
-------------------------------------------------
--- WHITELIST
-------------------------------------------------
-
-MainTab:CreateSection("Whitelist")
-
+local WhitelistSection = MainTab:CreateSection("Whitelist Options")
 local WhitelistDropdown
 
-MainTab:CreateInput({
+local WhitelistInput = MainTab:CreateInput({
 	Name = "Whitelist User",
-	PlaceholderText = "Username / Display / Initials",
+	PlaceholderText = "Enter username, display name or initials",
 	RemoveTextAfterFocusLost = false,
-
+	Flag = "Whitelist_Input",
 	Callback = safeCallback(function(Text)
+		local inputText = trim(Text)
+		if inputText ~= "" then
+			local foundPlayer = findPlayerByInput(inputText)
 
-		local player = findPlayer(Text)
-
-		if not player then
-			return
-		end
-
-		if not table.find(WhitelistUsers,player.Name) then
-			table.insert(WhitelistUsers,player.Name)
+			if foundPlayer then
+				if not table.find(WhitelistUsers, foundPlayer.Name) then
+					table.insert(WhitelistUsers, foundPlayer.Name)
+					print("Whitelisting user:", foundPlayer.Name)
+					if foundPlayer.Character then
+						addChams(foundPlayer, foundPlayer.Character)
+					end
+				else
+					print("User already whitelisted:", foundPlayer.Name)
+				end
+			else
+				print("User not found:", inputText)
+			end
 
 			if WhitelistDropdown then
 				WhitelistDropdown:Refresh(WhitelistUsers)
 			end
-		end
 
-		updateAllESP()
-	end)
+			updateAllHighlights()
+		end
+	end),
 })
 
 WhitelistDropdown = MainTab:CreateDropdown({
-	Name = "Whitelisted Users",
-	Options = {},
+	Name = "Whitelisted Users (Click to remove)",
+	Options = WhitelistUsers,
 	CurrentOption = nil,
 	MultipleOptions = false,
-
-	Callback = safeCallback(function(Value)
-
-		if not Value then
-			return
+	Flag = "Whitelist_Dropdown",
+	Callback = safeCallback(function(Options)
+		local selected = Options
+		if typeof(Options) == "table" then
+			selected = Options[1]
 		end
 
-		for i,v in ipairs(WhitelistUsers) do
-			if v == Value then
-				table.remove(WhitelistUsers,i)
-				break
+		if selected then
+			for i, v in ipairs(WhitelistUsers) do
+				if v == selected then
+					table.remove(WhitelistUsers, i)
+					print("Removed whitelisted user:", selected)
+					for _, player in ipairs(Players:GetPlayers()) do
+						if player.Name == selected and player.Character then
+							addChams(player, player.Character)
+						end
+					end
+					break
+				end
 			end
+
+			WhitelistDropdown:Refresh(WhitelistUsers)
+			updateAllHighlights()
 		end
-
-		WhitelistDropdown:Refresh(WhitelistUsers)
-
-		updateAllESP()
-	end)
+	end),
 })
 
 ------------------------------------------------
--- TARGET
+-- Sección: Target Options
 ------------------------------------------------
+local TargetSection = MainTab:CreateSection("Target Options")
+local TargetDropdown
 
-MainTab:CreateSection("Target")
-
-MainTab:CreateInput({
+local TargetInput = MainTab:CreateInput({
 	Name = "Target User",
-	PlaceholderText = "Username / Display / Initials",
+	PlaceholderText = "Enter username, display name or initials",
 	RemoveTextAfterFocusLost = false,
-
+	Flag = "Target_Input",
 	Callback = safeCallback(function(Text)
+		local inputText = trim(Text)
+		if inputText ~= "" then
+			local foundPlayer = findPlayerByInput(inputText)
 
-		local player = findPlayer(Text)
+			if foundPlayer then
+				TargetUser = foundPlayer.Name
+				print("Target set to:", TargetUser)
 
-		if player then
-			TargetUser = player.Name
-		else
-			TargetUser = nil
+				if foundPlayer.Character then
+					addChams(foundPlayer, foundPlayer.Character)
+				end
+			else
+				print("Target user not found:", inputText)
+				TargetUser = nil
+			end
+
+			local targetOption = {}
+			if TargetUser then
+				table.insert(targetOption, TargetUser)
+			end
+
+			if TargetDropdown then
+				TargetDropdown:Refresh(targetOption)
+			end
+
+			updateAllHighlights()
+		end
+	end),
+})
+
+TargetDropdown = MainTab:CreateDropdown({
+	Name = "Targeted User (Click to remove)",
+	Options = TargetUser and { TargetUser } or {},
+	CurrentOption = nil,
+	MultipleOptions = false,
+	Flag = "Target_Dropdown",
+	Callback = safeCallback(function(Options)
+		local selected = Options
+		if typeof(Options) == "table" then
+			selected = Options[1]
 		end
 
-		updateAllESP()
-	end)
+		if selected then
+			print("Removed target user:", selected)
+			TargetUser = nil
+
+			if TargetDropdown then
+				TargetDropdown:Refresh({})
+			end
+
+			updateAllHighlights()
+		end
+	end),
 })
 
 ------------------------------------------------
--- COLORS
+-- Sección: ESP Colors
 ------------------------------------------------
-
-ColorsTab:CreateSection("ESP Colors")
+local ColorSection = ColorsTab:CreateSection("Adjust ESP Colors")
 
 ColorsTab:CreateColorPicker({
 	Name = "Whitelist Color",
 	Color = whitelistColor,
-
+	Flag = "Color_Whitelist",
 	Callback = safeCallback(function(Value)
 		whitelistColor = Value
-		updateAllESP()
-	end)
+		print("Whitelist color set to:", whitelistColor)
+		updateAllHighlights()
+	end),
 })
 
 ColorsTab:CreateColorPicker({
 	Name = "Target Color",
 	Color = targetColor,
-
+	Flag = "Color_Target",
 	Callback = safeCallback(function(Value)
 		targetColor = Value
-		updateAllESP()
-	end)
+		print("Target color set to:", targetColor)
+		updateAllHighlights()
+	end),
 })
 
 ColorsTab:CreateColorPicker({
 	Name = "Chams Color",
 	Color = chamsColor,
-
+	Flag = "Color_Chams",
 	Callback = safeCallback(function(Value)
 		chamsColor = Value
-		updateAllESP()
-	end)
+		print("Chams color set to:", chamsColor)
+		updateAllHighlights()
+	end),
 })
 
 ColorsTab:CreateColorPicker({
 	Name = "Outline Color",
 	Color = outlineColor,
-
+	Flag = "Color_Outline",
 	Callback = safeCallback(function(Value)
 		outlineColor = Value
-		updateAllESP()
-	end)
+		print("Outline color set to:", outlineColor)
+		updateAllHighlights()
+	end),
+})
+
+local LabelColorsSection = ColorsTab:CreateSection("Label Colors")
+
+ColorsTab:CreateColorPicker({
+	Name = "Name Color",
+	Color = labelNameColor,
+	Flag = "Label_NameColor",
+	Callback = safeCallback(function(Value)
+		labelNameColor = Value
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer then
+				updatePlayerHeadLabel(player)
+			end
+		end
+	end),
+})
+
+ColorsTab:CreateColorPicker({
+	Name = "Distance Color",
+	Color = labelDistanceColor,
+	Flag = "Label_DistanceColor",
+	Callback = safeCallback(function(Value)
+		labelDistanceColor = Value
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer then
+				updatePlayerFeetLabel(player)
+			end
+		end
+	end),
 })
 
 ------------------------------------------------
--- CONFIG
+-- Sección: ESP Config
 ------------------------------------------------
-
-EspConfigTab:CreateSection("ESP Config")
+local ConfigSection = EspConfigTab:CreateSection("ESP Config")
 
 EspConfigTab:CreateToggle({
 	Name = "Show Player Name",
-	CurrentValue = showNameEnabled,
-
+	CurrentValue = false,
+	Flag = "ESP_ShowName",
 	Callback = safeCallback(function(Value)
 		showNameEnabled = Value
-	end)
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer then
+				updatePlayerHeadLabel(player)
+			end
+		end
+	end),
 })
 
 EspConfigTab:CreateToggle({
 	Name = "Show Distance",
-	CurrentValue = showDistanceEnabled,
-
+	CurrentValue = false,
+	Flag = "ESP_ShowDistance",
 	Callback = safeCallback(function(Value)
 		showDistanceEnabled = Value
-	end)
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer then
+				updatePlayerFeetLabel(player)
+			end
+		end
+	end),
 })
 
 EspConfigTab:CreateToggle({
 	Name = "Show Health",
-	CurrentValue = showHealthEnabled,
-
+	CurrentValue = false,
+	Flag = "ESP_ShowHealth",
 	Callback = safeCallback(function(Value)
 		showHealthEnabled = Value
-	end)
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer then
+				updatePlayerHeadLabel(player)
+			end
+		end
+	end),
+})
+
+EspConfigTab:CreateSlider({
+	Name = "Name Text Size",
+	Range = {8, 24},
+	Increment = 1,
+	Suffix = "px",
+	CurrentValue = nameTextSize,
+	Flag = "ESP_NameTextSize",
+	Callback = safeCallback(function(Value)
+		nameTextSize = Value
+		for _, player in ipairs(Players:GetPlayers()) do
+			if player ~= LocalPlayer then
+				updatePlayerHeadLabel(player)
+				updatePlayerFeetLabel(player)
+			end
+		end
+	end),
 })
 
 EspConfigTab:CreateToggle({
 	Name = "Enable Outline ESP",
-	CurrentValue = showOutlineEnabled,
-
+	CurrentValue = true,
+	Flag = "ESP_EnableOutline",
 	Callback = safeCallback(function(Value)
 		showOutlineEnabled = Value
-		updateAllESP()
-	end)
+		updateAllHighlights()
+	end),
 })
 
 EspConfigTab:CreateToggle({
 	Name = "Enable Full Chams ESP",
-	CurrentValue = showChamsEnabled,
-
+	CurrentValue = false,
+	Flag = "ESP_EnableChams",
 	Callback = safeCallback(function(Value)
 		showChamsEnabled = Value
-		updateAllESP()
-	end)
+		updateAllHighlights()
+	end),
 })
 
 EspConfigTab:CreateSlider({
 	Name = "Chams Opacity",
-	Range = {0,1},
+	Range = {0, 1},
 	Increment = 0.05,
+	Suffix = "",
 	CurrentValue = chamsOpacity,
-
+	Flag = "ESP_ChamsOpacity",
 	Callback = safeCallback(function(Value)
 		chamsOpacity = Value
-		updateAllESP()
-	end)
+		updateAllHighlights()
+	end),
 })
 
 EspConfigTab:CreateSlider({
-	Name = "Text Size",
-	Range = {8,24},
-	Increment = 1,
-	CurrentValue = nameTextSize,
-
-	Callback = safeCallback(function(Value)
-		nameTextSize = Value
-	end)
-})
-
-EspConfigTab:CreateSlider({
-	Name = "ESP Distance",
-	Range = {300,1400},
+	Name = "ESP Max Distance",
+	Range = {300, 1400},
 	Increment = 10,
+	Suffix = " studs",
 	CurrentValue = maxDistance,
-
+	Flag = "ESP_MaxDistance",
 	Callback = safeCallback(function(Value)
 		maxDistance = Value
-		updateAllESP()
-	end)
+		updateAllHighlights()
+	end),
 })
 
 ------------------------------------------------
--- PLAYER CONNECTIONS
+-- Aplicar ESP a jugadores existentes y nuevos
 ------------------------------------------------
-
-local function setupPlayer(player)
-	if player == LocalPlayer then
-		return
-	end
-
-	player.CharacterAdded:Connect(function()
-		task.wait(1)
-		updateAllESP()
-	end)
-
-	if player.Character then
-		updateAllESP()
-	end
-end
-
 for _, player in ipairs(Players:GetPlayers()) do
-	setupPlayer(player)
+	if player ~= LocalPlayer then
+		if player.Character then
+			addChams(player, player.Character)
+			updatePlayerHeadLabel(player)
+			updatePlayerFeetLabel(player)
+		end
+
+		player.CharacterAdded:Connect(function(char)
+			char:WaitForChild("Head", 5)
+			char:WaitForChild("HumanoidRootPart", 5)
+			addChams(player, char)
+			updatePlayerHeadLabel(player)
+			updatePlayerFeetLabel(player)
+		end)
+	end
 end
 
-Players.PlayerAdded:Connect(setupPlayer)
-
-------------------------------------------------
--- KEYBINDS
-------------------------------------------------
-
-UserInputService.InputBegan:Connect(safeCallback(function(input,gp)
-
-	if gp then
-		return
+Players.PlayerAdded:Connect(function(player)
+	if player ~= LocalPlayer then
+		player.CharacterAdded:Connect(function(char)
+			char:WaitForChild("Head", 5)
+			char:WaitForChild("HumanoidRootPart", 5)
+			addChams(player, char)
+			updatePlayerHeadLabel(player)
+			updatePlayerFeetLabel(player)
+		end)
 	end
+end)
+
+------------------------------------------------
+-- Cargar la Configuración
+------------------------------------------------
+pcall(function()
+	Rayfield:LoadConfiguration()
+end)
+
+------------------------------------------------
+-- Teclas de atajo
+------------------------------------------------
+UserInputService.InputBegan:Connect(safeCallback(function(input, gameProcessed)
+	if gameProcessed then return end
 
 	if input.KeyCode == uiToggleKey then
-		Window:ToggleVisibility()
+		toggleUI()
 	end
 
 	if input.KeyCode == espToggleKey then
 		espEnabled = not espEnabled
-
-		updateAllESP()
-
-		print("ESP:", espEnabled and "Enabled" or "Disabled")
+		updateAllHighlights()
+		print("ESP toggled via key:", espEnabled and "Enabled" or "Disabled")
 	end
 end))
-
-------------------------------------------------
--- LOAD CONFIG
-------------------------------------------------
-
-pcall(function()
-	Rayfield:LoadConfiguration()
-end)
