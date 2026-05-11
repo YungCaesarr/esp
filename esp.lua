@@ -675,6 +675,7 @@ end
 ------------------------------------------------
 -- KEYBINDS
 ------------------------------------------------
+
 local uiToggleKey = Enum.KeyCode.K
 local espToggleKey = Enum.KeyCode.F3
 
@@ -685,13 +686,18 @@ local keyOptions = {
 	"RightShift","LeftShift"
 }
 
+------------------------------------------------
+-- UI TOGGLE KEY DROPDOWN
+------------------------------------------------
 EspConfigTab:CreateDropdown({
-	Name = "Choose Toggle Key",
+	Name = "Choose UI Toggle Key",
 	Options = keyOptions,
 	CurrentOption = {"K"},
 	MultipleOptions = false,
 	Flag = "UI_KEY",
-	Callback = safeCallback(function(option)
+
+	Callback = function(option)
+
 		local selected = option
 
 		if typeof(option) == "table" then
@@ -700,28 +706,43 @@ EspConfigTab:CreateDropdown({
 
 		if selected and Enum.KeyCode[selected] then
 			uiToggleKey = Enum.KeyCode[selected]
-			print("UI Toggle Key changed to:", selected)
+
+			print("UI Toggle Key:", selected)
 		end
-	end)
+	end
 })
 
-UserInputService.InputBegan:Connect(safeCallback(function(input, gameProcessed)
+------------------------------------------------
+-- INPUT LISTENER
+------------------------------------------------
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+
 	if gameProcessed then
 		return
 	end
 
-	-- TOGGLE UI
+	------------------------------------------------
+	-- UI TOGGLE
+	------------------------------------------------
 	if input.KeyCode == uiToggleKey then
+
 		if Window and Window.ToggleVisibility then
 			Window:ToggleVisibility()
 		end
 	end
 
-	-- TOGGLE ESP
+	------------------------------------------------
+	-- ESP TOGGLE
+	------------------------------------------------
 	if input.KeyCode == espToggleKey then
+
 		espEnabled = not espEnabled
+
 		updateAllHighlights()
 
-		print("ESP:", espEnabled and "Enabled" or "Disabled")
+		print(
+			"ESP:",
+			espEnabled and "Enabled" or "Disabled"
+		)
 	end
-end))
+end)
