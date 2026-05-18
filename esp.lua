@@ -806,16 +806,33 @@ Rayfield:LoadConfiguration()
 -- Teclas de atajo para toggle UI y ESP
 ------------------------------------------------
 local uiToggleKey = Enum.KeyCode.K
-local espToggleKey = Enum.KeyCode.F3
 
+-- Toggle de la UI (esto se mantiene igual)
 UserInputService.InputBegan:Connect(safeCallback(function(input, gameProcessed)
 	if gameProcessed then return end
+
 	if input.KeyCode == uiToggleKey then
 		Window:ToggleVisibility()
 	end
-	if input.KeyCode == espToggleKey then
-		espEnabled = not espEnabled
-		updateAllHighlights()
-		print("ESP toggled via key:", espEnabled and "Enabled" or "Disabled")
-	end
 end))
+
+------------------------------------------------
+-- Keybind Selector para ESP
+------------------------------------------------
+local ESPKeybind = MainTab:CreateKeybind({
+	Name = "ESP Toggle Key",
+	CurrentKeybind = "F3",
+	HoldToInteract = false,
+	Flag = "ESP_ToggleKey",
+
+	Callback = safeCallback(function()
+		espEnabled = not espEnabled
+
+		-- Actualiza el toggle visual también
+		ToggleESP:Set(espEnabled)
+
+		updateAllHighlights()
+
+		print("ESP toggled via key:", espEnabled and "Enabled" or "Disabled")
+	end),
+})
